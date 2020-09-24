@@ -43,7 +43,7 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   ros::NodeHandle nh_priv("~");
 
-  RobotLocalization::RosEkf ekf(nh, nh_priv);
+  RobotLocalization::RosEkf ekf(nh, nh_priv); 
   ekf.initialize();
   ros::spin();
 

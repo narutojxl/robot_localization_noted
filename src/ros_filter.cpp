@@ -153,7 +153,10 @@ namespace RobotLocalization
     lastDiagTime_ = ros::Time::now();
 
     periodicUpdateTimer_ = nh_.createTimer(ros::Duration(1./frequency_), &RosFilter<T>::periodicUpdate, this);
+    //创建一个定时器，定期的处理缓存队列中的measurements
+    //调用了EKF预测和更新
   }
+
 
   template<typename T>
   void RosFilter<T>::reset()
@@ -287,6 +290,7 @@ namespace RobotLocalization
     RF_DEBUG("\n----- /RosFilter::accelerationCallback (" << topicName << ") ------\n");
   }
 
+
   template<typename T>
   void RosFilter<T>::controlCallback(const geometry_msgs::Twist::ConstPtr &msg)
   {
@@ -319,6 +323,7 @@ namespace RobotLocalization
         baseLinkFrameId_ << "). Message frame was " << msg->header.frame_id);
     }
   }
+
 
   template<typename T>
   void RosFilter<T>::enqueueMeasurement(const std::string &topicName,
@@ -370,6 +375,7 @@ namespace RobotLocalization
     updateVector[StateMemberVpitch] = 1;
     updateVector[StateMemberAz] = 1;
   }
+
 
   template<typename T>
   bool RosFilter<T>::getFilteredOdometryMessage(nav_msgs::Odometry &message)
@@ -430,6 +436,7 @@ namespace RobotLocalization
     return filter_.getInitializedStatus();
   }
 
+
   template<typename T>
   bool RosFilter<T>::getFilteredAccelMessage(geometry_msgs::AccelWithCovarianceStamped &message)
   {
@@ -464,6 +471,7 @@ namespace RobotLocalization
 
     return filter_.getInitializedStatus();
   }
+
 
   template<typename T>
   void RosFilter<T>::imuCallback(const sensor_msgs::Imu::ConstPtr &msg,
@@ -579,6 +587,7 @@ namespace RobotLocalization
     RF_DEBUG("\n----- /RosFilter::imuCallback (" << topicName << ") ------\n");
   }
 
+
   template<typename T>
   void RosFilter<T>::integrateMeasurements(const ros::Time &currentTime)
   {
@@ -646,7 +655,8 @@ namespace RobotLocalization
         }
 
         // This will call predict and, if necessary, correct
-        filter_.processMeasurement(*(measurement.get()));
+        filter_.processMeasurement(*(measurement.get())); //TODO EKF::predict() and correct()
+
 
         // Store old states and measurements if we're smoothing
         if (smoothLaggedData_)
@@ -698,6 +708,8 @@ namespace RobotLocalization
 
     RF_DEBUG("\n----- /RosFilter::integrateMeasurements ------\n");
   }
+
+
 
   template<typename T>
   void RosFilter<T>::loadParams()
@@ -956,6 +968,8 @@ namespace RobotLocalization
       }
     }
 
+
+
     bool dynamicProcessNoiseCovariance = false;
     nhLocal_.param("dynamic_process_noise_covariance", dynamicProcessNoiseCovariance, false);
     filter_.setUseDynamicProcessNoiseCovariance(dynamicProcessNoiseCovariance);
@@ -1025,6 +1039,8 @@ namespace RobotLocalization
     // Init the last measurement time so we don't get a huge initial delta
     filter_.setLastMeasurementTime(ros::Time::now().toSec());
 
+
+    //============================== odom0, odom1, ... odomX ========================
     // Now pull in each topic to which we want to subscribe.
     // Start with odom.
     size_t topicInd = 0;
@@ -1087,9 +1103,10 @@ namespace RobotLocalization
         nhLocal_.param(odomTopicName + "_queue_size", odomQueueSize, 1);
 
         const CallbackData poseCallbackData(odomTopicName + "_pose", poseUpdateVec, poseUpdateSum, differential,
-          relative, poseMahalanobisThresh);
+          relative, poseMahalanobisThresh); //odom pose callback 
+
         const CallbackData twistCallbackData(odomTopicName + "_twist", twistUpdateVec, twistUpdateSum, false, false,
-          twistMahalanobisThresh);
+          twistMahalanobisThresh); //odom twist callback
 
         bool nodelayOdom = false;
         nhLocal_.param(odomTopicName + "_nodelay", nodelayOdom, false);
@@ -1138,7 +1155,7 @@ namespace RobotLocalization
         if (twistUpdateSum > 0)
         {
           twistVarCounts[StateMemberVx] += twistUpdateVec[StateMemberVx];
-          twistVarCounts[StateMemberVy] += twistUpdateVec[StateMemberVx];
+          twistVarCounts[StateMemberVy] += twistUpdateVec[StateMemberVy]; //TODO: default: StateMemberVx
           twistVarCounts[StateMemberVz] += twistUpdateVec[StateMemberVz];
           twistVarCounts[StateMemberVroll] += twistUpdateVec[StateMemberVroll];
           twistVarCounts[StateMemberVpitch] += twistUpdateVec[StateMemberVpitch];
@@ -1156,6 +1173,9 @@ namespace RobotLocalization
     }
     while (moreParams);
 
+
+
+    //============================== pose0, pose1, ... poseX ========================
     // Repeat for pose
     topicInd = 0;
     moreParams = false;
@@ -1253,6 +1273,9 @@ namespace RobotLocalization
     }
     while (moreParams);
 
+
+
+    //============================== twist0, twist1, ... twistX ========================
     // Repeat for twist
     topicInd = 0;
     moreParams = false;
@@ -1317,6 +1340,9 @@ namespace RobotLocalization
     }
     while (moreParams);
 
+
+
+    //============================== imu0, imu1, ... imuX ========================
     // Repeat for IMU
     topicInd = 0;
     moreParams = false;
@@ -1367,7 +1393,7 @@ namespace RobotLocalization
 
         bool removeGravAcc = false;
         nhLocal_.param(imuTopicName + "_remove_gravitational_acceleration", removeGravAcc, false);
-        removeGravitationalAcc_[imuTopicName + "_acceleration"] = removeGravAcc;
+        removeGravitationalAcc_[imuTopicName + "_acceleration"] = removeGravAcc; //TODO：需要从加速度中去掉重力
 
         // Now pull in its boolean update vector configuration and differential
         // update configuration (as this contains pose information)
@@ -1456,8 +1482,10 @@ namespace RobotLocalization
         {
           const CallbackData poseCallbackData(imuTopicName + "_pose", poseUpdateVec, poseUpdateSum, differential,
             relative, poseMahalanobisThresh);
+
           const CallbackData twistCallbackData(imuTopicName + "_twist", twistUpdateVec, twistUpdateSum, differential,
             relative, twistMahalanobisThresh);
+
           const CallbackData accelCallbackData(imuTopicName + "_acceleration", accelUpdateVec, accelUpdateSum,
             differential, relative, accelMahalanobisThresh);
 
@@ -1509,6 +1537,9 @@ namespace RobotLocalization
       }
     }
     while (moreParams);
+
+
+
 
     // Now that we've checked if IMU linear acceleration is being used, we can determine our final control parameters
     if (useControl_ && std::accumulate(controlUpdateVector.begin(), controlUpdateVector.end(), 0) == 0)
@@ -1700,7 +1731,9 @@ namespace RobotLocalization
 
       filter_.setEstimateErrorCovariance(initialEstimateErrorCovariance);
     }
-  }
+  }//end loadParams()
+
+
 
   template<typename T>
   void RosFilter<T>::odometryCallback(const nav_msgs::Odometry::ConstPtr &msg, const std::string &topicName,
@@ -1733,7 +1766,7 @@ namespace RobotLocalization
       posPtr->pose = msg->pose;  // Entire pose object, also copies covariance
 
       geometry_msgs::PoseWithCovarianceStampedConstPtr pptr(posPtr);
-      poseCallback(pptr, poseCallbackData, worldFrameId_, false);
+      poseCallback(pptr, poseCallbackData, worldFrameId_, false);  //odom pose callback
     }
 
     if (twistCallbackData.updateSum_ > 0)
@@ -1745,11 +1778,13 @@ namespace RobotLocalization
       twistPtr->twist = msg->twist;  // Entire twist object, also copies covariance
 
       geometry_msgs::TwistWithCovarianceStampedConstPtr tptr(twistPtr);
-      twistCallback(tptr, twistCallbackData, baseLinkFrameId_);
+      twistCallback(tptr, twistCallbackData, baseLinkFrameId_); //odom twist callback
     }
 
     RF_DEBUG("\n----- /RosFilter::odometryCallback (" << topicName << ") ------\n");
   }
+
+
 
   template<typename T>
   void RosFilter<T>::poseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg,
@@ -1852,6 +1887,7 @@ namespace RobotLocalization
     RF_DEBUG("\n----- /RosFilter::poseCallback (" << topicName << ") ------\n");
   }
 
+
   template<typename T>
   void RosFilter<T>::periodicUpdate(const ros::TimerEvent& event)
   {
@@ -1872,10 +1908,10 @@ namespace RobotLocalization
 
     ros::Time curTime = ros::Time::now();
 
-    if (toggledOn_)
+    if (toggledOn_) //在不调用”toggle“服务时，一直保持为true
     {
       // Now we'll integrate any measurements we've received if requested
-      integrateMeasurements(curTime);
+      integrateMeasurements(curTime); //核心
     }
     else
     {
@@ -1892,7 +1928,7 @@ namespace RobotLocalization
     // Get latest state and publish it
     nav_msgs::Odometry filteredPosition;
 
-    if (getFilteredOdometryMessage(filteredPosition))
+    if (getFilteredOdometryMessage(filteredPosition)) //滤波器估计的是“world_frame”--->"base_link"的TF
     {
       worldBaseLinkTransMsg_.transform = tf2::toMsg(tf2::Transform::getIdentity());
       worldBaseLinkTransMsg_.header.stamp = filteredPosition.header.stamp + tfTimeOffset_;
@@ -1916,11 +1952,11 @@ namespace RobotLocalization
       // worldFrameId_ is the mapFrameId_ frame, we'll have some work to do.
       if (publishTransform_)
       {
-        if (filteredPosition.header.frame_id == odomFrameId_)
+        if (filteredPosition.header.frame_id == odomFrameId_)//滤波器的“world_frame” = "odom"
         {
           worldTransformBroadcaster_.sendTransform(worldBaseLinkTransMsg_);
         }
-        else if (filteredPosition.header.frame_id == mapFrameId_)
+        else if (filteredPosition.header.frame_id == mapFrameId_) //滤波器的“world_frame” = "map"
         {
           try
           {
@@ -1950,7 +1986,9 @@ namespace RobotLocalization
             */
 
             tf2::Transform mapOdomTrans;
-            mapOdomTrans.mult(worldBaseLinkTrans, baseLinkOdomTrans);
+            mapOdomTrans.mult(worldBaseLinkTrans, baseLinkOdomTrans); 
+            //TODO: 当yaml中配置“world_frame” = "map"时，说明其他节点正在发布odom--->base_link，由于一个坐标系不能有多于一个的parent frame, 
+            //滤波器得到的map--->base_link不能直接发布，所以转换为发布map--->odom
 
             geometry_msgs::TransformStamped mapOdomTransMsg;
             mapOdomTransMsg.transform = tf2::toMsg(mapOdomTrans);
@@ -2006,6 +2044,9 @@ namespace RobotLocalization
       clearExpiredHistory(filter_.getLastMeasurementTime() - historyLength_);
     }
   }
+
+
+
 
   template<typename T>
   void RosFilter<T>::setPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg)
@@ -2173,6 +2214,7 @@ namespace RobotLocalization
 
     RF_DEBUG("\n----- /RosFilter::twistCallback (" << topicName << ") ------\n");
   }
+
 
   template<typename T>
   void RosFilter<T>::addDiagnostic(const int errLevel,
@@ -2358,6 +2400,9 @@ namespace RobotLocalization
     return updateVector;
   }
 
+
+
+
   template<typename T>
   bool RosFilter<T>::prepareAcceleration(const sensor_msgs::Imu::ConstPtr &msg,
                            const std::string &topicName,
@@ -2423,7 +2468,7 @@ namespace RobotLocalization
       // of normal forces, so we use a parameter
       if (removeGravitationalAcc_[topicName])
       {
-        tf2::Vector3 normAcc(0, 0, gravitationalAcc_);
+        tf2::Vector3 normAcc(0, 0, gravitationalAcc_); //9.8
         tf2::Quaternion curAttitude;
         tf2::Transform trans;
 
@@ -2457,7 +2502,7 @@ namespace RobotLocalization
         }
         trans.setRotation(curAttitude);
         tf2::Vector3 rotNorm = trans.getBasis().inverse() * normAcc;
-        accTmp.setX(accTmp.getX() - rotNorm.getX());
+        accTmp.setX(accTmp.getX() - rotNorm.getX()); //TODO: 默认imu是ENU型，加速度去重力，lego_loam笔记中也有。
         accTmp.setY(accTmp.getY() - rotNorm.getY());
         accTmp.setZ(accTmp.getZ() - rotNorm.getZ());
 
@@ -2474,7 +2519,7 @@ namespace RobotLocalization
       // accTmp = targetFrameTrans.getBasis() * accTmp - targetFrameTrans.getOrigin().cross(rotation_acceleration);
       // We can get rotational acceleration by differentiating the rotational velocity
       // (if it's available)
-      accTmp = targetFrameTrans.getBasis() * accTmp;
+      accTmp = targetFrameTrans.getBasis() * accTmp;  //从imu_link转换到base_link下
       maskAcc = targetFrameTrans.getBasis() * maskAcc;
 
       // Now use the mask values to determine which update vector values should be true
@@ -2621,6 +2666,7 @@ namespace RobotLocalization
 
     // Fill out the orientation data
     poseTmp.setRotation(orientation);
+
 
     // 2. Get the target frame transformation
     tf2::Transform targetFrameTrans;
@@ -3077,6 +3123,7 @@ namespace RobotLocalization
     return canTransform;
   }
 
+
   template<typename T>
   void RosFilter<T>::saveFilterState(FilterBase& filter)
   {
@@ -3162,6 +3209,7 @@ namespace RobotLocalization
 
     return retVal;
   }
+
 
   template<typename T>
   bool RosFilter<T>::validateFilterOutput(const nav_msgs::Odometry &message)
