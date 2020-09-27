@@ -225,13 +225,13 @@ namespace RobotLocalization
       if (delta > 0)
       {
         validateDelta(delta);
-        predict(measurement.time_, delta);
+        predict(measurement.time_, delta); //Ekf::predict() 或 Ukf::predict()
 
         // Return this to the user
         predictedState_ = state_;
       }
 
-      correct(measurement);
+      correct(measurement); //Ekf::correct() 或 Ukf::correct()
     }
     else
     {

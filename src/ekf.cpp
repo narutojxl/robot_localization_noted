@@ -207,6 +207,7 @@ namespace RobotLocalization
     }
   }
 
+
   void Ekf::predict(const double referenceTime, const double delta)
   {
     FB_DEBUG("---------------------- Ekf::predict ----------------------\n" <<
@@ -237,7 +238,9 @@ namespace RobotLocalization
     double sy = ::sin(yaw);
     double cy = ::cos(yaw);
 
-    prepareControl(referenceTime, delta);
+    prepareControl(referenceTime, delta); 
+
+    //transferFunction_: 在构造函数中已经初始化为了I。
 
     // Prepare the transfer function
     transferFunction_(StateMemberX, StateMemberVx) = cy * cp * delta;
@@ -258,13 +261,17 @@ namespace RobotLocalization
     transferFunction_(StateMemberZ, StateMemberAx) = 0.5 * transferFunction_(StateMemberZ, StateMemberVx) * delta;
     transferFunction_(StateMemberZ, StateMemberAy) = 0.5 * transferFunction_(StateMemberZ, StateMemberVy) * delta;
     transferFunction_(StateMemberZ, StateMemberAz) = 0.5 * transferFunction_(StateMemberZ, StateMemberVz) * delta;
-    transferFunction_(StateMemberRoll, StateMemberVroll) = delta;
+
+    transferFunction_(StateMemberRoll, StateMemberVroll) = delta; //TODO jxl： 跟以前的代码相比，不一样。以前的代码有bug，笔记中已更正。
     transferFunction_(StateMemberRoll, StateMemberVpitch) = sr * tp * delta;
     transferFunction_(StateMemberRoll, StateMemberVyaw) = cr * tp * delta;
+
     transferFunction_(StateMemberPitch, StateMemberVpitch) = cr * delta;
     transferFunction_(StateMemberPitch, StateMemberVyaw) = -sr * delta;
+
     transferFunction_(StateMemberYaw, StateMemberVpitch) = sr * cpi * delta;
     transferFunction_(StateMemberYaw, StateMemberVyaw) = cr * cpi * delta;
+    
     transferFunction_(StateMemberVx, StateMemberAx) = delta;
     transferFunction_(StateMemberVy, StateMemberAy) = delta;
     transferFunction_(StateMemberVz, StateMemberAz) = delta;
@@ -331,14 +338,19 @@ namespace RobotLocalization
     transferFunctionJacobian_(StateMemberX, StateMemberRoll) = dFx_dR;
     transferFunctionJacobian_(StateMemberX, StateMemberPitch) = dFx_dP;
     transferFunctionJacobian_(StateMemberX, StateMemberYaw) = dFx_dY;
+
     transferFunctionJacobian_(StateMemberY, StateMemberRoll) = dFy_dR;
     transferFunctionJacobian_(StateMemberY, StateMemberPitch) = dFy_dP;
     transferFunctionJacobian_(StateMemberY, StateMemberYaw) = dFy_dY;
+
     transferFunctionJacobian_(StateMemberZ, StateMemberRoll) = dFz_dR;
     transferFunctionJacobian_(StateMemberZ, StateMemberPitch) = dFz_dP;
+
     transferFunctionJacobian_(StateMemberRoll, StateMemberRoll) = dFR_dR;
     transferFunctionJacobian_(StateMemberRoll, StateMemberPitch) = dFR_dP;
+
     transferFunctionJacobian_(StateMemberPitch, StateMemberRoll) = dFP_dR;
+
     transferFunctionJacobian_(StateMemberYaw, StateMemberRoll) = dFY_dR;
     transferFunctionJacobian_(StateMemberYaw, StateMemberPitch) = dFY_dP;
 
@@ -362,8 +374,10 @@ namespace RobotLocalization
 
     state_(StateMemberAx) = (controlUpdateVector_[ControlMemberVx] ?
       controlAcceleration_(ControlMemberVx) : state_(StateMemberAx));
+
     state_(StateMemberAy) = (controlUpdateVector_[ControlMemberVy] ?
       controlAcceleration_(ControlMemberVy) : state_(StateMemberAy));
+
     state_(StateMemberAz) = (controlUpdateVector_[ControlMemberVz] ?
       controlAcceleration_(ControlMemberVz) : state_(StateMemberAz));
 
