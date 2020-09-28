@@ -715,6 +715,12 @@ template<class T> class RosFilter
     //! @brief optional signaling diagnostic frequency
     //!
     std::unique_ptr<diagnostic_updater::HeaderlessTopicDiagnostic> freqDiag_;
+
+    //jxl: for fusion with lego_loam
+    void handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg);
+    void handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg);
+    std::string wheel_odom_topic_, laser_odom_topic_;
+
 };
 
 }  // namespace RobotLocalization

@@ -1,0 +1,126 @@
+frequency: 30
+sensor_timeout: 0.1
+two_d_mode: false
+transform_timeout: 1.0
+
+print_diagnostics: true  # /diagnostics_agg
+debug: false
+debug_out_file: /tmp/robot_localization_debug.txt
+
+publish_tf: false 
+publish_acceleration: false 
+
+
+
+map_frame: camera_init
+odom_frame: camera_init
+base_link_frame: virtual_velodyne
+world_frame: camera_init
+
+
+#wheel_odom
+odom0: /odom
+odom0_config: [true,  true,  false,
+               false, false, false,
+               true,  false, false,
+               false, false, true,
+               false, false, false]  #x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+
+odom0_nodelay: false
+odom0_differential: false 
+odom0_relative: false 
+odom0_queue_size: 5
+#odom0_pose_rejection_threshold: 5
+#odom0_twist_rejection_threshold: 3
+
+
+#laser_odom
+odom1: /laser_odom_to_init
+odom1_config: [true,  true,  true,
+               true,  true,  true,
+               false, false, false,
+               false, false, false,
+               false, false, false]  
+
+odom1_nodelay: false
+odom1_differential: false 
+odom1_relative: false 
+odom1_queue_size: 5
+
+
+
+
+imu0: /imu/data
+imu0_config: [false, false, false,
+              true,  true,  true,
+              false, false, false,
+              true,  true,  true,
+              false, false, false]
+imu0_nodelay: false
+imu0_differential: false
+imu0_relative: false
+imu0_queue_size: 5
+#imu0_pose_rejection_threshold: 0.8                 
+#imu0_twist_rejection_threshold: 0.8               
+#imu0_linear_acceleration_rejection_threshold: 0.8  
+
+imu0_remove_gravitational_acceleration: true  #true: topic中的加速度未把重力从加速度中去除
+gravitational_acceleration: 9.80665  #robot_localization assumes an ENU frame for all IMU data, and does not work with NED frame data
+#经确定，我们的imu是ENU，输出的线加速度未把重力过滤掉， 25hz
+
+
+#use_control为true时，这些加速度，减速度的值才会生效
+use_control: false  #if true, sub /cmd_vel topic, 我们底盘产生的是/t_cmd_vel,输入给velocity_smoother，输出/smooth_cmd_vel, 输入给/air_driver_node
+stamped_control: false
+control_timeout: 0.2
+control_config: [true, false, false, false, false, true]   # Which velocities are being controlled. Order is vx, vy, vz, vroll, vpitch, vyaw.
+acceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 3.4]
+deceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 4.5]
+acceleration_gains: [0.8, 0.0, 0.0, 0.0, 0.0, 0.9]
+deceleration_gains: [1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+
+
+smooth_lagged_data: false
+history_length: 3  #单位为s
+
+
+
+#这的process_noise_covariance是： 每秒covariance变化多少
+process_noise_covariance: [0.05, 0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0.05, 0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0.05,  0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0.05, 0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0.05, 0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0.05, 0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0.025, 0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     1e-9,  0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     1e-9, 0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    1e-9, 0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    1e-9, 0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0.01, 0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    1e-9, 0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    1e-9, 0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    1e-9]
+     
+
+
+
+
+
+initial_estimate_covariance: [0.05, 0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                              0,    0.05, 0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                              0,    0,    0.05, 0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                              0,    0,    0,    0.05, 0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                              0,    0,    0,    0,    0.05, 0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                              0,    0,    0,    0,    0,    0.05, 0,    0,    0,    0,     0,     0,     0,    0,    0,
+                              0,    0,    0,    0,    0,    0,    0.05, 0,    0,    0,     0,     0,     0,    0,    0,
+                              0,    0,    0,    0,    0,    0,    0,    1e-9, 0,    0,     0,     0,     0,    0,    0,
+                              0,    0,    0,    0,    0,    0,    0,    0,    1e-9, 0,     0,     0,     0,    0,    0,
+                              0,    0,    0,    0,    0,    0,    0,    0,    0,    1e-9,  0,     0,     0,    0,    0,
+                              0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     1e-9,  0,     0,    0,    0,
+                              0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0.01,  0,    0,    0,
+                              0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0.05, 0,    0,
+                              0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    1e-9, 0,
+                              0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    1e-9] 
+

@@ -36,6 +36,7 @@
 #include "robot_localization/ukf.h"
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf/tf.h> //for lego_loam laser odom parse
 
 #include <algorithm>
 #include <map>
@@ -778,6 +779,11 @@ namespace RobotLocalization
     nhLocal_.param("base_link_frame", baseLinkFrameId_, std::string("base_link"));
     nhLocal_.param("base_link_frame_output", baseLinkOutputFrameId_, baseLinkFrameId_);
 
+    //jxl
+    nhLocal_.param("wheel_odom_topic", wheel_odom_topic_, std::string("/odom"));
+    nhLocal_.param("laser_odom_topic", laser_odom_topic_, std::string("/laser_odom_to_init"));
+
+
     /*
      * These parameters are designed to enforce compliance with REP-105:
      * http://www.ros.org/reps/rep-0105.html
@@ -1101,7 +1107,7 @@ namespace RobotLocalization
         int twistUpdateSum = std::accumulate(twistUpdateVec.begin(), twistUpdateVec.end(), 0);
         int odomQueueSize = 1;
         nhLocal_.param(odomTopicName + "_queue_size", odomQueueSize, 1);
-
+       
         const CallbackData poseCallbackData(odomTopicName + "_pose", poseUpdateVec, poseUpdateSum, differential,
           relative, poseMahalanobisThresh); //odom pose callback 
 
@@ -1393,7 +1399,7 @@ namespace RobotLocalization
 
         bool removeGravAcc = false;
         nhLocal_.param(imuTopicName + "_remove_gravitational_acceleration", removeGravAcc, false);
-        removeGravitationalAcc_[imuTopicName + "_acceleration"] = removeGravAcc; //TODO：需要从加速度中去掉重力
+        removeGravitationalAcc_[imuTopicName + "_acceleration"] = removeGravAcc; //true: 需要从加速度中去掉重力
 
         // Now pull in its boolean update vector configuration and differential
         // update configuration (as this contains pose information)
@@ -1734,11 +1740,151 @@ namespace RobotLocalization
   }//end loadParams()
 
 
+//jxl: 
+template<typename T>
+void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
+  // 对底盘的"/odom"转换到t时刻虚拟laser在camera_init(0时刻的虚拟laser) 下的位姿:
+  // 把odom --->base_link 的转换为 camera_init --->virtual_laser下的位姿。
+
+  modified_msg = *msg;
+
+  geometry_msgs::Transform tmp;
+  tf2::Transform info;
+  tmp.translation.x = msg->pose.pose.position.x;
+  tmp.translation.y = msg->pose.pose.position.y;
+  tmp.translation.z = msg->pose.pose.position.z;
+  tmp.rotation.x = msg->pose.pose.orientation.x;
+  tmp.rotation.y = msg->pose.pose.orientation.y;
+  tmp.rotation.z = msg->pose.pose.orientation.z;
+  tmp.rotation.w = msg->pose.pose.orientation.w;
+
+  // tf2::transformMsgToTF2(tmp, info); 该函数只在buffer_core.cpp中声明和实现，在buffer_core.h中没有声明,所以不能用
+  info = tf2::Transform(tf2::Quaternion(tmp.rotation.x, tmp.rotation.y, tmp.rotation.z, tmp.rotation.w), 
+                       tf2::Vector3(tmp.translation.x, tmp.translation.y, tmp.translation.z));
+
+  std::string base_link(msg->header.frame_id);
+  tf2::Transform virtual_velodye_to_base_link;
+  tf2::fromMsg(tfBuffer_.lookupTransform(baseLinkFrameId_, base_link, ros::Time(0)).transform, //"virtual_velodyne", "base_link" 
+               virtual_velodye_to_base_link);
+  tf2::Transform T_vir_velodyne_to_base = virtual_velodye_to_base_link;
+  T_vir_velodyne_to_base.setOrigin(tf2::Vector3(0, 0, 0));
+
+  //1. transform for pose 
+  virtual_velodye_to_base_link *= info;
+  virtual_velodye_to_base_link *= info.inverse();
+
+  // tf2::transformTF2ToMsg(virtual_velodye_to_base_link, tmp); 该函数只在buffer_core.cpp中声明和实现，在buffer_core.h中没有声明,所以不能用
+   tmp.translation.x = virtual_velodye_to_base_link.getOrigin().x();
+   tmp.translation.y = virtual_velodye_to_base_link.getOrigin().y();
+   tmp.translation.z = virtual_velodye_to_base_link.getOrigin().z();
+   tmp.rotation.x = virtual_velodye_to_base_link.getRotation().x();
+   tmp.rotation.y = virtual_velodye_to_base_link.getRotation().y();
+   tmp.rotation.z = virtual_velodye_to_base_link.getRotation().z();
+   tmp.rotation.w = virtual_velodye_to_base_link.getRotation().w();
+
+
+  //2. transform for velocity(rotate)
+  tf2::Vector3 raw_linear(msg->twist.twist.linear.x,  
+                          msg->twist.twist.linear.y,
+                          msg->twist.twist.linear.z); 
+  tf2::Vector3 raw_angular(msg->twist.twist.angular.x,  
+                           msg->twist.twist.angular.y,
+                           msg->twist.twist.angular.z);             
+  tf2::Vector3 rotated_linear = T_vir_velodyne_to_base * raw_linear;
+  tf2::Vector3 rotated_angular = T_vir_velodyne_to_base * raw_angular;
+
+  //save result
+  modified_msg.header.frame_id = odomFrameId_;   // "/camera_init"
+  modified_msg.child_frame_id = baseLinkFrameId_;// "/virtual_velodyne"
+  modified_msg.pose.pose.position.x = tmp.translation.x;
+  modified_msg.pose.pose.position.y = tmp.translation.y;
+  modified_msg.pose.pose.position.z = tmp.translation.z;
+  modified_msg.pose.pose.orientation.x = tmp.rotation.x;
+  modified_msg.pose.pose.orientation.y = tmp.rotation.y;
+  modified_msg.pose.pose.orientation.z = tmp.rotation.z;
+  modified_msg.pose.pose.orientation.w = tmp.rotation.w;
+
+  modified_msg.twist.twist.linear.x = rotated_linear.getX();
+  modified_msg.twist.twist.linear.y = rotated_linear.getY();
+  modified_msg.twist.twist.linear.z = rotated_linear.getZ();
+
+  modified_msg.twist.twist.angular.x = rotated_angular.getX();
+  modified_msg.twist.twist.angular.y = rotated_angular.getY();
+  modified_msg.twist.twist.angular.z = rotated_angular.getZ();
+
+  std::cout<<"handle wheel_odom result\n";
+  std::cout<<"result pose:\n";
+  for(int i = 0; i < 6; i++){
+    for(int j = 0; j <6; j++){
+      std::cout<<modified_msg.pose.covariance[i*6+j]<<" ";
+    }
+    std::cout<<","<<std::endl;
+  }
+  std::cout<<"\nresult velocity:\n";
+  for(int i = 0; i < 6; i++){
+    for(int j = 0; j <6; j++){
+      std::cout<<modified_msg.twist.covariance[i*6+j]<<" ";
+    }
+    std::cout<<","<<std::endl;
+  }
+}
+
+//jxl: 
+template<typename T>
+void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
+   //对lego_loam的topic中的旋转分量(位置分量不用变)，反解析得到t时刻虚拟laser在camera_init(0时刻的虚拟laser)位姿。
+   //根据lego_loam::mapOptimization::laserOdometryHandler()
+
+  modified_msg = *msg;
+
+  double roll, pitch, yaw;
+  geometry_msgs::Quaternion geoQuat = msg->pose.pose.orientation;
+  tf::Matrix3x3(tf::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
+  double raw_pitch = -pitch; //虽然中间经过别扭转换，transformSum[0]仍然是在featureAssociation中计算的transformSum[0]，x_pitch
+  double raw_yaw  = -yaw;   //y_yaw
+  double raw_roll = roll;   //z_roll 
+  // rotation = Ry(raw_yaw) * Rx(raw_pitch) * Rz(raw_roll) //zhangji
+  //          = Rz(raw_yaw) * Ry(raw_pitch) * Rx(raw_roll) //ros
+
+  tf2::Matrix3x3 R;
+  tf2::Quaternion q;
+  R.setRPY(raw_pitch, raw_yaw, raw_roll);   //TODO：这的顺序设置对吗？
+  // R.setRPY(raw_roll, raw_pitch, raw_yaw);
+  R.getRotation(q);
+  
+  //设置旋转
+  modified_msg.pose.pose.orientation.x = q.getX();
+  modified_msg.pose.pose.orientation.y = q.getY();
+  modified_msg.pose.pose.orientation.z = q.getZ();
+  modified_msg.pose.pose.orientation.w = q.getW();
+
+  //设置位姿的covariance, 因为该topic的pose covariance全为0
+  modified_msg.pose.covariance[0*6+0] = 0.1; //x, y, z
+  modified_msg.pose.covariance[1*6+1] = 0.1;
+  modified_msg.pose.covariance[2*6+2] = 0.1;
+  modified_msg.pose.covariance[3*6+3] = 0.1; //roll, pitch, yaw
+  modified_msg.pose.covariance[4*6+4] = 0.1;
+  modified_msg.pose.covariance[5*6+5] = 0.1;
+
+  modified_msg.header.frame_id = odomFrameId_; //"camera_init";
+  modified_msg.child_frame_id = baseLinkFrameId_; //"virtual_velodyne";
+
+}
+
 
   template<typename T>
   void RosFilter<T>::odometryCallback(const nav_msgs::Odometry::ConstPtr &msg, const std::string &topicName,
     const CallbackData &poseCallbackData, const CallbackData &twistCallbackData)
   {
+   nav_msgs::Odometry modified_msg; //jxl: 把下面涉及到msg的地方做修改
+   if(!topicName.compare(wheel_odom_topic_)){
+     handle_wheel_odom(msg, modified_msg);
+   }else  if(topicName.compare(laser_odom_topic_)){
+     handle_laser_odom(msg, modified_msg);
+   }else{
+      ROS_ERROR("Please check the odom topic");
+   }
+
     // If we've just reset the filter, then we want to ignore any messages
     // that arrive with an older timestamp
     if (msg->header.stamp <= lastSetPoseTime_)
@@ -1762,8 +1908,12 @@ namespace RobotLocalization
     {
       // Grab the pose portion of the message and pass it to the poseCallback
       geometry_msgs::PoseWithCovarianceStamped *posPtr = new geometry_msgs::PoseWithCovarianceStamped();
-      posPtr->header = msg->header;
-      posPtr->pose = msg->pose;  // Entire pose object, also copies covariance
+      // default:
+      // posPtr->header = msg->header;
+      // posPtr->pose = msg->pose;  // Entire pose object, also copies covariance
+
+      posPtr->header = modified_msg.header; //jxl
+      posPtr->pose = modified_msg.pose;
 
       geometry_msgs::PoseWithCovarianceStampedConstPtr pptr(posPtr);
       poseCallback(pptr, poseCallbackData, worldFrameId_, false);  //odom pose callback
@@ -1773,9 +1923,14 @@ namespace RobotLocalization
     {
       // Grab the twist portion of the message and pass it to the twistCallback
       geometry_msgs::TwistWithCovarianceStamped *twistPtr = new geometry_msgs::TwistWithCovarianceStamped();
-      twistPtr->header = msg->header;
-      twistPtr->header.frame_id = msg->child_frame_id;
-      twistPtr->twist = msg->twist;  // Entire twist object, also copies covariance
+      // default:
+      // twistPtr->header = msg->header;
+      // twistPtr->header.frame_id = msg->child_frame_id;
+      // twistPtr->twist = msg->twist;  // Entire twist object, also copies covariance
+
+      twistPtr->header = modified_msg.header; //jxl
+      twistPtr->header.frame_id = modified_msg.child_frame_id;
+      twistPtr->twist = modified_msg.twist;
 
       geometry_msgs::TwistWithCovarianceStampedConstPtr tptr(twistPtr);
       twistCallback(tptr, twistCallbackData, baseLinkFrameId_); //odom twist callback
@@ -2010,6 +2165,20 @@ namespace RobotLocalization
                            ", expected " << mapFrameId_ << " or " << odomFrameId_);
         }
       }
+      
+      //jxl: 对融合后的位姿按照lego_loam中featureAssociation.cpp对transform_sum也做同样的修改
+      tf2::Quaternion q(filteredPosition.pose.pose.orientation.x, 
+                        filteredPosition.pose.pose.orientation.y,
+                        filteredPosition.pose.pose.orientation.z,
+                        filteredPosition.pose.pose.orientation.w);
+      double roll, pitch, yaw;
+      tf2::Matrix3x3 R(q);
+      R.getRPY(roll, pitch, yaw);
+      geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(yaw, -roll, -pitch); 
+      filteredPosition.pose.pose.orientation.x = -geoQuat.y;
+      filteredPosition.pose.pose.orientation.y = -geoQuat.z;
+      filteredPosition.pose.pose.orientation.z = geoQuat.x;
+      filteredPosition.pose.pose.orientation.w = geoQuat.w;
 
       // Fire off the position and the transform
       positionPub_.publish(filteredPosition);
