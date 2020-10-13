@@ -70,7 +70,7 @@ gravitational_acceleration: 9.80665  #robot_localization assumes an ENU frame fo
 
 
 #use_control为true时，这些加速度，减速度的值才会生效
-use_control: false  #if true, sub /cmd_vel topic, 我们底盘产生的是/t_cmd_vel,输入给velocity_smoother，输出/smooth_cmd_vel, 输入给/air_driver_node
+use_control: false 
 stamped_control: false
 control_timeout: 0.2
 control_config: [true, false, false, false, false, true]   # Which velocities are being controlled. Order is vx, vy, vz, vroll, vpitch, vyaw.

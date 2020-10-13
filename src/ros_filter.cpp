@@ -1740,10 +1740,10 @@ namespace RobotLocalization
   }//end loadParams()
 
 
-//jxl: 
+//TODO: jxl: 
 template<typename T>
 void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
-  // 对底盘的"/odom"转换到t时刻虚拟laser在camera_init(0时刻的虚拟laser) 下的位姿:
+  // 对底盘的"/odom"转换到t时刻虚拟laser在camera_init(0时刻的虚拟laser) 下的位姿: 
   // 把odom --->base_link 的转换为 camera_init --->virtual_laser下的位姿。
 
   modified_msg = *msg;
@@ -1829,7 +1829,7 @@ void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, na
   }
 }
 
-//jxl: 
+//TODO: jxl: 
 template<typename T>
 void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
    //对lego_loam的topic中的旋转分量(位置分量不用变)，反解析得到t时刻虚拟laser在camera_init(0时刻的虚拟laser)位姿。
@@ -1908,6 +1908,7 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
     {
       // Grab the pose portion of the message and pass it to the poseCallback
       geometry_msgs::PoseWithCovarianceStamped *posPtr = new geometry_msgs::PoseWithCovarianceStamped();
+
       // default:
       // posPtr->header = msg->header;
       // posPtr->pose = msg->pose;  // Entire pose object, also copies covariance
@@ -2142,7 +2143,7 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
 
             tf2::Transform mapOdomTrans;
             mapOdomTrans.mult(worldBaseLinkTrans, baseLinkOdomTrans); 
-            //TODO: 当yaml中配置“world_frame” = "map"时，说明其他节点正在发布odom--->base_link，由于一个坐标系不能有多于一个的parent frame, 
+            //当yaml中配置“world_frame” = "map"时，说明其他节点正在发布odom--->base_link，由于一个坐标系不能有多于一个的parent frame, 
             //滤波器得到的map--->base_link不能直接发布，所以转换为发布map--->odom
 
             geometry_msgs::TransformStamped mapOdomTransMsg;
@@ -2166,7 +2167,9 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
         }
       }
       
-      //jxl: 对融合后的位姿按照lego_loam中featureAssociation.cpp对transform_sum也做同样的修改
+      //TODO jxl: 
+      //对融合后的位姿按照lego_loam中featureAssociation.cpp对transform_sum也做同样的修改
+      //给lego_loam的后端使用
       tf2::Quaternion q(filteredPosition.pose.pose.orientation.x, 
                         filteredPosition.pose.pose.orientation.y,
                         filteredPosition.pose.pose.orientation.z,

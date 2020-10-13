@@ -4,8 +4,8 @@
 
 <!--static_transform_publisher x y z yaw pitch roll  frame_id   child_frame_id   period_in_ms-->
 <node pkg="tf" type="static_transform_publisher" name="velodyne_to_vir_velodyne"  args="0 0 0  1.570795   0   1.570795   /velodyne  /virtual_velodyne 50" />
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_base_footprint" args="0 0 0   0 0 0  /velodyne  /base_footprint   50" />
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_imu_link" args="0 0 0   0 0 0  /velodyne  /imu_link   50" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_base_footprint" args="-0.2385 0 -0.609   0 0 0  /velodyne  /base_footprint   50" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_imu_link" args="0.14 0 0.05  0 0 0  /velodyne  /imu_link   50" />
 <!--set frame consistent with topic msg-->
 <!--"velodyne_points": velodyne-->
 <!--"/imu/data": imu_link-->
