@@ -4,7 +4,7 @@ two_d_mode: false
 transform_timeout: 1.0
 
 print_diagnostics: true  # /diagnostics_agg
-debug: false
+debug: true
 debug_out_file: /tmp/robot_localization_debug.txt
 
 publish_tf: false 
@@ -12,18 +12,18 @@ publish_acceleration: false
 
 
 
-map_frame: camera_init
+map_frame: map    #camera_init
 odom_frame: camera_init
 base_link_frame: virtual_velodyne
 world_frame: camera_init
 
 
 #wheel_odom
-odom0: /odom
+odom0: /odom1
 odom0_config: [true,  true,  false,
                false, false, false,
-               true,  false, false,
-               false, false, true,
+               false, false, false,
+               false, false, false,
                false, false, false]  #x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
 
 odom0_nodelay: false
@@ -50,7 +50,7 @@ odom1_queue_size: 5
 
 
 
-imu0: /imu/data
+imu0: /imu/data1
 imu0_config: [false, false, false,
               true,  true,  true,
               false, false, false,

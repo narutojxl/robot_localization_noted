@@ -811,14 +811,14 @@ namespace RobotLocalization
      */
     nhLocal_.param("world_frame", worldFrameId_, odomFrameId_);
 
-    ROS_FATAL_COND(mapFrameId_ == odomFrameId_ ||
-                   odomFrameId_ == baseLinkFrameId_ ||
-                   mapFrameId_ == baseLinkFrameId_ ||
-                   odomFrameId_ == baseLinkOutputFrameId_ ||
-                   mapFrameId_ == baseLinkOutputFrameId_,
-                   "Invalid frame configuration! The values for map_frame, odom_frame, "
-                   "and base_link_frame must be unique. If using a base_link_frame_output values, it "
-                   "must not match the map_frame or odom_frame.");
+    // ROS_FATAL_COND(mapFrameId_ == odomFrameId_ ||
+    //                odomFrameId_ == baseLinkFrameId_ ||
+    //                mapFrameId_ == baseLinkFrameId_ ||
+    //                odomFrameId_ == baseLinkOutputFrameId_ ||
+    //                mapFrameId_ == baseLinkOutputFrameId_,
+    //                "Invalid frame configuration! The values for map_frame, odom_frame, "
+    //                "and base_link_frame must be unique. If using a base_link_frame_output values, it "
+    //                "must not match the map_frame or odom_frame.");
 
     // Try to resolve tf_prefix
     std::string tfPrefix = "";
@@ -1850,6 +1850,7 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
   tf2::Quaternion q;
   R.setRPY(raw_pitch, raw_yaw, raw_roll);   //TODO：这的顺序设置对吗？
   // R.setRPY(raw_roll, raw_pitch, raw_yaw);
+
   R.getRotation(q);
   
   //设置旋转
