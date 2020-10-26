@@ -3,18 +3,21 @@
 
 
 <!--static_transform_publisher x y z yaw pitch roll  frame_id   child_frame_id   period_in_ms-->
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_vir_velodyne"  args="0 0 0  1.570795   0   1.570795   /velodyne  /virtual_velodyne 50" />
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_base_footprint" args="-0.2385 0 -0.609   0 0 0  /velodyne  /base_footprint   50" />
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_imu_link" args="0.14 0 0.05  0 0 0  /velodyne  /imu_link   50" />
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_velodyne" args="0 0 0  0 0 0  /base_link  /velodyne   50" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_vir_velodyne"  args="0 0 0  1.570795   0   1.570795   /velodyne  /virtual_velodyne 20" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_base_footprint" args="-0.2385 0 -0.609   0 0 0  /velodyne  /base_footprint   20" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_imu_link" args="0.14 0 0.05  0 0 0  /velodyne  /imu_link   20" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_velodyne" args="0 0 0  0 0 0  /base_link  /velodyne   20" />
 
 <!--set frame consistent with topic msg-->
 <!--"velodyne_points": velodyne-->
 <!--"/imu/data": imu_link-->
 <!--"odom": base_footprint-->
 
-<node pkg="robot_localization" type="ekf_localization_node" name="ekf_rl_node" >
+<node pkg="robot_localization" type="ekf_localization_node" name="ekf_rl_node"  output="screen">
     <rosparam command="load" file="$(find robot_localization)/params/ekf_lego_loam.yaml" />
+    <param name="wheel_odom_topic" value="/odom" />
+    <param name="laser_odom_topic" value="/laser_odom_to_init" />
+
     <remap from="/odometry/filtered" to="/ekf_laser_odom_to_init"/>
 </node>
 </launch>

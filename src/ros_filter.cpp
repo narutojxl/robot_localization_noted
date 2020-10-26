@@ -757,8 +757,8 @@ namespace RobotLocalization
 
         // Make sure we succeeded
         if (debugStream_.is_open())
-        {
-          filter_.setDebug(debug, &debugStream_);
+        {  
+          filter_.setDebug(debug, &debugStream_); //jxl: 
         }
         else
         {
@@ -859,6 +859,10 @@ namespace RobotLocalization
 
     // Determine if we're in 2D mode
     nhLocal_.param("two_d_mode", twoDMode_, false);
+
+    // Whether or not to print warning for tf lookup failure
+    // Note: accesses the root of the parameter tree, not the local parameters
+    nh_.param("/silent_tf_failure", silentTfFailure_, false);
 
     // Smoothing window size
     nhLocal_.param("smooth_lagged_data", smoothLaggedData_, false);
@@ -1005,13 +1009,14 @@ namespace RobotLocalization
              "\nmap_frame is " << mapFrameId_ <<
              "\nodom_frame is " << odomFrameId_ <<
              "\nbase_link_frame is " << baseLinkFrameId_ <<
-             "\base_link_frame_output is " << baseLinkOutputFrameId_ <<
+             "\nbase_link_frame_output is " << baseLinkOutputFrameId_ <<
              "\nworld_frame is " << worldFrameId_ <<
              "\ntransform_time_offset is " << tfTimeOffset_.toSec() <<
              "\ntransform_timeout is " << tfTimeout_.toSec() <<
              "\nfrequency is " << frequency_ <<
              "\nsensor_timeout is " << filter_.getSensorTimeout() <<
              "\ntwo_d_mode is " << (twoDMode_ ? "true" : "false") <<
+             "\nsilent_tf_failure is " << (silentTfFailure_ ? "true" : "false") <<
              "\nsmooth_lagged_data is " << (smoothLaggedData_ ? "true" : "false") <<
              "\nhistory_length is " << historyLength_ <<
              "\nuse_control is " << (useControl_ ? "true" : "false") <<
@@ -1025,6 +1030,7 @@ namespace RobotLocalization
              "\ninitial state is " << filter_.getState() <<
              "\ndynamic_process_noise_covariance is " << (dynamicProcessNoiseCovariance ? "true" : "false") <<
              "\nprint_diagnostics is " << (printDiagnostics_ ? "true" : "false") << "\n");
+
 
     // Create a subscriber for manually setting/resetting pose
     setPoseSub_ = nh_.subscribe("set_pose",
@@ -1122,7 +1128,7 @@ namespace RobotLocalization
         {
           topicSubs_.push_back(
             nh_.subscribe<nav_msgs::Odometry>(odomTopic, odomQueueSize,
-              boost::bind(&RosFilter::odometryCallback, this, _1, odomTopicName, poseCallbackData, twistCallbackData),
+              boost::bind(&RosFilter::odometryCallback, this, _1, odomTopic, poseCallbackData, twistCallbackData), //default: odomTopicName
               ros::VoidPtr(), ros::TransportHints().tcpNoDelay(nodelayOdom)));
         }
         else
@@ -1745,7 +1751,8 @@ template<typename T>
 void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
   // 对底盘的"/odom"转换到t时刻虚拟laser在camera_init(0时刻的虚拟laser) 下的位姿: 
   // 把odom --->base_link 的转换为 camera_init --->virtual_laser下的位姿。
-
+  
+  std::cout<<"Enter wheel odom\n\n";
   modified_msg = *msg;
 
   geometry_msgs::Transform tmp;
@@ -1764,14 +1771,16 @@ void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, na
 
   std::string base_link(msg->header.frame_id);
   tf2::Transform virtual_velodye_to_base_link;
-  tf2::fromMsg(tfBuffer_.lookupTransform(baseLinkFrameId_, base_link, ros::Time(0)).transform, //"virtual_velodyne", "base_link" 
+  
+  if(tfBuffer_.canTransform(baseLinkFrameId_, base_link, ros::Time(0),  ros::Duration(0.5) ))
+    tf2::fromMsg(tfBuffer_.lookupTransform(baseLinkFrameId_, base_link, ros::Time(0)).transform, //"virtual_velodyne", "base_link" 
                virtual_velodye_to_base_link);
-  tf2::Transform T_vir_velodyne_to_base = virtual_velodye_to_base_link;
-  T_vir_velodyne_to_base.setOrigin(tf2::Vector3(0, 0, 0));
 
+  tf2::Transform T_vir_velodyne_to_base = virtual_velodye_to_base_link;
+ 
   //1. transform for pose 
   virtual_velodye_to_base_link *= info;
-  virtual_velodye_to_base_link *= info.inverse();
+  virtual_velodye_to_base_link *= T_vir_velodyne_to_base.inverse();
 
   // tf2::transformTF2ToMsg(virtual_velodye_to_base_link, tmp); 该函数只在buffer_core.cpp中声明和实现，在buffer_core.h中没有声明,所以不能用
    tmp.translation.x = virtual_velodye_to_base_link.getOrigin().x();
@@ -1789,7 +1798,9 @@ void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, na
                           msg->twist.twist.linear.z); 
   tf2::Vector3 raw_angular(msg->twist.twist.angular.x,  
                            msg->twist.twist.angular.y,
-                           msg->twist.twist.angular.z);             
+                           msg->twist.twist.angular.z); 
+
+  T_vir_velodyne_to_base.setOrigin(tf2::Vector3(0, 0, 0));            
   tf2::Vector3 rotated_linear = T_vir_velodyne_to_base * raw_linear;
   tf2::Vector3 rotated_angular = T_vir_velodyne_to_base * raw_angular;
 
@@ -1812,21 +1823,44 @@ void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, na
   modified_msg.twist.twist.angular.y = rotated_angular.getY();
   modified_msg.twist.twist.angular.z = rotated_angular.getZ();
 
-  std::cout<<"handle wheel_odom result\n";
-  std::cout<<"result pose:\n";
-  for(int i = 0; i < 6; i++){
+  
+  //20201022录得地下车库包， 协方差有问题
+  for(int i = 0; i < 6; i++)
     for(int j = 0; j <6; j++){
-      std::cout<<modified_msg.pose.covariance[i*6+j]<<" ";
-    }
-    std::cout<<","<<std::endl;
+      modified_msg.pose.covariance[i*6+j]=0.0;
+      modified_msg.twist.covariance[i*6+j]=0.0;
   }
-  std::cout<<"\nresult velocity:\n";
-  for(int i = 0; i < 6; i++){
-    for(int j = 0; j <6; j++){
-      std::cout<<modified_msg.twist.covariance[i*6+j]<<" ";
-    }
-    std::cout<<","<<std::endl;
-  }
+  modified_msg.pose.covariance[0*6 + 0] = 0.1;
+  modified_msg.pose.covariance[1*6 + 1] = 0.1;
+  modified_msg.pose.covariance[2*6 + 2] = 1e-4;
+  modified_msg.pose.covariance[3*6 + 3] = 1e-4;
+  modified_msg.pose.covariance[4*6 + 4] = 1e-4;
+  modified_msg.pose.covariance[5*6 + 5] = 0.1;
+
+  modified_msg.twist.covariance[0*6 + 0] = 0.01;
+  modified_msg.twist.covariance[1*6 + 1] = 1e-4;
+  modified_msg.twist.covariance[2*6 + 2] = 1e-4;
+  modified_msg.twist.covariance[3*6 + 3] = 1e-4;
+  modified_msg.twist.covariance[4*6 + 4] = 1e-4;
+  modified_msg.twist.covariance[5*6 + 5] = 0.01;
+
+  // std::cout<<"\n\nhandle wheel_odom result\n";
+  // std::cout<<"result pose:\n";
+  // for(int i = 0; i < 6; i++){
+  //   for(int j = 0; j <6; j++){
+  //     std::cout<<modified_msg.pose.covariance[i*6+j]<<" ";
+  //   }
+  //   std::cout<<","<<std::endl;
+  // }
+
+  // std::cout<<"\nresult velocity:\n";
+  // for(int i = 0; i < 6; i++){
+  //   for(int j = 0; j <6; j++){
+  //     std::cout<<modified_msg.twist.covariance[i*6+j]<<" ";
+  //   }
+  //   std::cout<<","<<std::endl;
+  // }
+
 }
 
 //TODO: jxl: 
@@ -1834,12 +1868,13 @@ template<typename T>
 void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
    //对lego_loam的topic中的旋转分量(位置分量不用变)，反解析得到t时刻虚拟laser在camera_init(0时刻的虚拟laser)位姿。
    //根据lego_loam::mapOptimization::laserOdometryHandler()
-
+  
+  std::cout<<"Enter laser odom\n\n";
   modified_msg = *msg;
 
   double roll, pitch, yaw;
   geometry_msgs::Quaternion geoQuat = msg->pose.pose.orientation;
-  tf::Matrix3x3(tf::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
+  tf2::Matrix3x3(tf2::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
   double raw_pitch = -pitch; //虽然中间经过别扭转换，transformSum[0]仍然是在featureAssociation中计算的transformSum[0]，x_pitch
   double raw_yaw  = -yaw;   //y_yaw
   double raw_roll = roll;   //z_roll 
@@ -1860,12 +1895,16 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
   modified_msg.pose.pose.orientation.w = q.getW();
 
   //设置位姿的covariance, 因为该topic的pose covariance全为0
-  modified_msg.pose.covariance[0*6+0] = 0.1; //x, y, z
-  modified_msg.pose.covariance[1*6+1] = 0.1;
-  modified_msg.pose.covariance[2*6+2] = 0.1;
-  modified_msg.pose.covariance[3*6+3] = 0.1; //roll, pitch, yaw
-  modified_msg.pose.covariance[4*6+4] = 0.1;
-  modified_msg.pose.covariance[5*6+5] = 0.1;
+  for(int i = 0; i < 6; i++)
+    for(int j = 0; j <6; j++){
+      modified_msg.pose.covariance[i*6+j]=0.0;
+  }
+  modified_msg.pose.covariance[0*6+0] = 0.01; //x, y, z
+  modified_msg.pose.covariance[1*6+1] = 0.01;
+  modified_msg.pose.covariance[2*6+2] = 0.01;
+  modified_msg.pose.covariance[3*6+3] = 0.01; //roll, pitch, yaw
+  modified_msg.pose.covariance[4*6+4] = 0.01;
+  modified_msg.pose.covariance[5*6+5] = 0.01;
 
   modified_msg.header.frame_id = odomFrameId_; //"camera_init";
   modified_msg.child_frame_id = baseLinkFrameId_; //"virtual_velodyne";
@@ -1878,9 +1917,10 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
     const CallbackData &poseCallbackData, const CallbackData &twistCallbackData)
   {
    nav_msgs::Odometry modified_msg; //jxl: 把下面涉及到msg的地方做修改
-   if(!topicName.compare(wheel_odom_topic_)){
+
+   if(topicName.compare(wheel_odom_topic_) == 0){
      handle_wheel_odom(msg, modified_msg);
-   }else  if(topicName.compare(laser_odom_topic_)){
+   }else if(topicName.compare(laser_odom_topic_) == 0){
      handle_laser_odom(msg, modified_msg);
    }else{
       ROS_ERROR("Please check the odom topic");
@@ -2625,15 +2665,13 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
     // It's unlikely that we'll get a velocity measurement in another frame, but
     // we have to handle the situation.
     tf2::Transform targetFrameTrans;
-    bool silent_tf_failure;
-    nh_.getParam("/silent_tf_failure", silent_tf_failure);
     bool canTransform = RosFilterUtilities::lookupTransformSafe(tfBuffer_,
                                                                 targetFrame,
                                                                 msgFrame,
                                                                 msg->header.stamp,
                                                                 tfTimeout_,
                                                                 targetFrameTrans,
-                                                                silent_tf_failure);
+                                                                silentTfFailure_);
 
     if (canTransform)
     {
