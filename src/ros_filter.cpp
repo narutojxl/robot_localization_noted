@@ -68,6 +68,7 @@ namespace RobotLocalization
       toggledOn_(true),
       twoDMode_(false),
       useControl_(false),
+      silentTfFailure_(false),
       dynamicDiagErrorLevel_(diagnostic_msgs::DiagnosticStatus::OK),
       staticDiagErrorLevel_(diagnostic_msgs::DiagnosticStatus::OK),
       frequency_(30.0),
@@ -156,6 +157,35 @@ namespace RobotLocalization
     periodicUpdateTimer_ = nh_.createTimer(ros::Duration(1./frequency_), &RosFilter<T>::periodicUpdate, this);
     //创建一个定时器，定期的处理缓存队列中的measurements
     //调用了EKF预测和更新
+
+    
+    //TODO: jxl
+    tfBuffer_.clear();
+    std::string velodyne("velodyne_link");
+    std::string vir_velodyne("virtual_velodyne");
+    std::string base_footprint("base_footprint");
+    
+    std::string error_msg("static tf not available, wait for available");
+    while(true){
+      auto available = tfBuffer_.canTransform(vir_velodyne, velodyne,  ros::Time(0),  ros::Duration(5), &error_msg);
+      if(available){
+        tf2::fromMsg(tfBuffer_.lookupTransform(vir_velodyne, velodyne, ros::Time(0)).transform, //"virtual_velodyne" to  "velodyne"
+                     virtual_velodye_to_velodyne_);
+        velodyne_to_virtual_velodyne_ = virtual_velodye_to_velodyne_.inverse();
+        break;
+      }
+    }
+
+    while(true){
+      auto available = tfBuffer_.canTransform(base_footprint, velodyne,  ros::Time(0),  ros::Duration(5), &error_msg);
+      if(available){
+        tf2::fromMsg(tfBuffer_.lookupTransform(base_footprint, velodyne, ros::Time(0)).transform, //"virtual_velodyne" to  "velodyne"
+                     base_footprint_to_velodyne_);
+        velodyne_to_base_footprint_ = base_footprint_to_velodyne_.inverse();
+        break;
+      }
+    }
+
   }
 
 
@@ -473,7 +503,8 @@ namespace RobotLocalization
     return filter_.getInitializedStatus();
   }
 
-
+  
+  //TODO: jxl
   template<typename T>
   void RosFilter<T>::imuCallback(const sensor_msgs::Imu::ConstPtr &msg,
                                  const std::string &topicName,
@@ -758,7 +789,7 @@ namespace RobotLocalization
         // Make sure we succeeded
         if (debugStream_.is_open())
         {  
-          filter_.setDebug(debug, &debugStream_); //jxl: 
+          filter_.setDebug(debug, &debugStream_); //jxl: 写入debug文件
         }
         else
         {
@@ -782,6 +813,7 @@ namespace RobotLocalization
     //jxl
     nhLocal_.param("wheel_odom_topic", wheel_odom_topic_, std::string("/odom"));
     nhLocal_.param("laser_odom_topic", laser_odom_topic_, std::string("/laser_odom_to_init"));
+    nhLocal_.param("wheel_odom_covariance_valid", wheel_odom_covariance_valid_, false);
 
 
     /*
@@ -811,14 +843,14 @@ namespace RobotLocalization
      */
     nhLocal_.param("world_frame", worldFrameId_, odomFrameId_);
 
-    // ROS_FATAL_COND(mapFrameId_ == odomFrameId_ ||
-    //                odomFrameId_ == baseLinkFrameId_ ||
-    //                mapFrameId_ == baseLinkFrameId_ ||
-    //                odomFrameId_ == baseLinkOutputFrameId_ ||
-    //                mapFrameId_ == baseLinkOutputFrameId_,
-    //                "Invalid frame configuration! The values for map_frame, odom_frame, "
-    //                "and base_link_frame must be unique. If using a base_link_frame_output values, it "
-    //                "must not match the map_frame or odom_frame.");
+    ROS_FATAL_COND(mapFrameId_ == odomFrameId_ ||
+                   odomFrameId_ == baseLinkFrameId_ ||
+                   mapFrameId_ == baseLinkFrameId_ ||
+                   odomFrameId_ == baseLinkOutputFrameId_ ||
+                   mapFrameId_ == baseLinkOutputFrameId_,
+                   "Invalid frame configuration! The values for map_frame, odom_frame, "
+                   "and base_link_frame must be unique. If using a base_link_frame_output values, it "
+                   "must not match the map_frame or odom_frame.");
 
     // Try to resolve tf_prefix
     std::string tfPrefix = "";
@@ -1746,159 +1778,202 @@ namespace RobotLocalization
   }//end loadParams()
 
 
-//TODO: jxl: 
-template<typename T>
-void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
-  // 对底盘的"/odom"转换到t时刻虚拟laser在camera_init(0时刻的虚拟laser) 下的位姿: 
-  // 把odom --->base_link 的转换为 camera_init --->virtual_laser下的位姿。
+// //TODO: jxl: 
+// template<typename T>
+// void RosFilter<T>::handle_wheel_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
+//   // 对底盘的"/odom"转换到t时刻虚拟laser在camera_init(0时刻的虚拟laser) 下的位姿: 
+//   // 把odom --->base_footprint 的转换为 camera_init --->virtual_laser下的位姿。
   
-  std::cout<<"Enter wheel odom\n\n";
-  modified_msg = *msg;
+//   // std::cout<<"Enter wheel odom\n\n";
+//   modified_msg = *msg;
 
-  geometry_msgs::Transform tmp;
-  tf2::Transform info;
-  tmp.translation.x = msg->pose.pose.position.x;
-  tmp.translation.y = msg->pose.pose.position.y;
-  tmp.translation.z = msg->pose.pose.position.z;
-  tmp.rotation.x = msg->pose.pose.orientation.x;
-  tmp.rotation.y = msg->pose.pose.orientation.y;
-  tmp.rotation.z = msg->pose.pose.orientation.z;
-  tmp.rotation.w = msg->pose.pose.orientation.w;
+//   geometry_msgs::Transform tmp;
+//   tf2::Transform info;
+//   tmp.translation.x = msg->pose.pose.position.x;
+//   tmp.translation.y = msg->pose.pose.position.y;
+//   tmp.translation.z = msg->pose.pose.position.z;
+//   tmp.rotation.x = msg->pose.pose.orientation.x;
+//   tmp.rotation.y = msg->pose.pose.orientation.y;
+//   tmp.rotation.z = msg->pose.pose.orientation.z;
+//   tmp.rotation.w = msg->pose.pose.orientation.w;
 
-  // tf2::transformMsgToTF2(tmp, info); 该函数只在buffer_core.cpp中声明和实现，在buffer_core.h中没有声明,所以不能用
-  info = tf2::Transform(tf2::Quaternion(tmp.rotation.x, tmp.rotation.y, tmp.rotation.z, tmp.rotation.w), 
-                       tf2::Vector3(tmp.translation.x, tmp.translation.y, tmp.translation.z));
+//   // tf2::transformMsgToTF2(tmp, info); 该函数只在buffer_core.cpp中声明和实现，在buffer_core.h中没有声明,所以不能用
+//   info = tf2::Transform(tf2::Quaternion(tmp.rotation.x, tmp.rotation.y, tmp.rotation.z, tmp.rotation.w), 
+//                        tf2::Vector3(tmp.translation.x, tmp.translation.y, tmp.translation.z));
 
-  std::string base_link(msg->header.frame_id);
-  tf2::Transform virtual_velodye_to_base_link;
+//   std::string base_link(msg->header.frame_id);
+//   tf2::Transform virtual_velodye_to_base_link;
   
-  if(tfBuffer_.canTransform(baseLinkFrameId_, base_link, ros::Time(0),  ros::Duration(0.5) ))
-    tf2::fromMsg(tfBuffer_.lookupTransform(baseLinkFrameId_, base_link, ros::Time(0)).transform, //"virtual_velodyne", "base_link" 
-               virtual_velodye_to_base_link);
+//   if(tfBuffer_.canTransform(baseLinkFrameId_, base_link, ros::Time(0),  ros::Duration(0.2))){
+//     tf2::fromMsg(tfBuffer_.lookupTransform(baseLinkFrameId_, base_link, ros::Time(0)).transform, //"virtual_velodyne", "base_link" 
+//                virtual_velodye_to_base_link);
+//   }
+     
 
-  tf2::Transform T_vir_velodyne_to_base = virtual_velodye_to_base_link;
+
+//   tf2::Transform T_vir_velodyne_to_base = virtual_velodye_to_base_link;
  
-  //1. transform for pose 
-  virtual_velodye_to_base_link *= info;
-  virtual_velodye_to_base_link *= T_vir_velodyne_to_base.inverse();
+//   //1. transform for pose 
+//   virtual_velodye_to_base_link *= info;
+//   virtual_velodye_to_base_link *= T_vir_velodyne_to_base.inverse();
 
-  // tf2::transformTF2ToMsg(virtual_velodye_to_base_link, tmp); 该函数只在buffer_core.cpp中声明和实现，在buffer_core.h中没有声明,所以不能用
-   tmp.translation.x = virtual_velodye_to_base_link.getOrigin().x();
-   tmp.translation.y = virtual_velodye_to_base_link.getOrigin().y();
-   tmp.translation.z = virtual_velodye_to_base_link.getOrigin().z();
-   tmp.rotation.x = virtual_velodye_to_base_link.getRotation().x();
-   tmp.rotation.y = virtual_velodye_to_base_link.getRotation().y();
-   tmp.rotation.z = virtual_velodye_to_base_link.getRotation().z();
-   tmp.rotation.w = virtual_velodye_to_base_link.getRotation().w();
+//   // tf2::transformTF2ToMsg(virtual_velodye_to_base_link, tmp); 该函数只在buffer_core.cpp中声明和实现，在buffer_core.h中没有声明,所以不能用
+//    tmp.translation.x = virtual_velodye_to_base_link.getOrigin().x();
+//    tmp.translation.y = virtual_velodye_to_base_link.getOrigin().y();
+//    tmp.translation.z = virtual_velodye_to_base_link.getOrigin().z();
+//    tmp.rotation.x = virtual_velodye_to_base_link.getRotation().x();
+//    tmp.rotation.y = virtual_velodye_to_base_link.getRotation().y();
+//    tmp.rotation.z = virtual_velodye_to_base_link.getRotation().z();
+//    tmp.rotation.w = virtual_velodye_to_base_link.getRotation().w();
 
 
-  //2. transform for velocity(rotate)
-  tf2::Vector3 raw_linear(msg->twist.twist.linear.x,  
-                          msg->twist.twist.linear.y,
-                          msg->twist.twist.linear.z); 
-  tf2::Vector3 raw_angular(msg->twist.twist.angular.x,  
-                           msg->twist.twist.angular.y,
-                           msg->twist.twist.angular.z); 
+//   //2. transform for velocity(rotate)
+//   tf2::Vector3 raw_linear(msg->twist.twist.linear.x,  
+//                           msg->twist.twist.linear.y,
+//                           msg->twist.twist.linear.z); 
+//   tf2::Vector3 raw_angular(msg->twist.twist.angular.x,  
+//                            msg->twist.twist.angular.y,
+//                            msg->twist.twist.angular.z); 
 
-  T_vir_velodyne_to_base.setOrigin(tf2::Vector3(0, 0, 0));            
-  tf2::Vector3 rotated_linear = T_vir_velodyne_to_base * raw_linear;
-  tf2::Vector3 rotated_angular = T_vir_velodyne_to_base * raw_angular;
+//   T_vir_velodyne_to_base.setOrigin(tf2::Vector3(0, 0, 0));            
+//   tf2::Vector3 rotated_linear = T_vir_velodyne_to_base * raw_linear;
+//   tf2::Vector3 rotated_angular = T_vir_velodyne_to_base * raw_angular;
 
-  //save result
-  modified_msg.header.frame_id = odomFrameId_;   // "/camera_init"
-  modified_msg.child_frame_id = baseLinkFrameId_;// "/virtual_velodyne"
-  modified_msg.pose.pose.position.x = tmp.translation.x;
-  modified_msg.pose.pose.position.y = tmp.translation.y;
-  modified_msg.pose.pose.position.z = tmp.translation.z;
-  modified_msg.pose.pose.orientation.x = tmp.rotation.x;
-  modified_msg.pose.pose.orientation.y = tmp.rotation.y;
-  modified_msg.pose.pose.orientation.z = tmp.rotation.z;
-  modified_msg.pose.pose.orientation.w = tmp.rotation.w;
+//   //save result
+//   modified_msg.header.frame_id = odomFrameId_;   // "/camera_init"
+//   modified_msg.child_frame_id = baseLinkFrameId_;// "/virtual_velodyne"
+//   modified_msg.pose.pose.position.x = tmp.translation.x;
+//   modified_msg.pose.pose.position.y = tmp.translation.y;
+//   modified_msg.pose.pose.position.z = tmp.translation.z;
+//   modified_msg.pose.pose.orientation.x = tmp.rotation.x;
+//   modified_msg.pose.pose.orientation.y = tmp.rotation.y;
+//   modified_msg.pose.pose.orientation.z = tmp.rotation.z;
+//   modified_msg.pose.pose.orientation.w = tmp.rotation.w;
 
-  modified_msg.twist.twist.linear.x = rotated_linear.getX();
-  modified_msg.twist.twist.linear.y = rotated_linear.getY();
-  modified_msg.twist.twist.linear.z = rotated_linear.getZ();
+//   modified_msg.twist.twist.linear.x = rotated_linear.getX();
+//   modified_msg.twist.twist.linear.y = rotated_linear.getY();
+//   modified_msg.twist.twist.linear.z = rotated_linear.getZ();
 
-  modified_msg.twist.twist.angular.x = rotated_angular.getX();
-  modified_msg.twist.twist.angular.y = rotated_angular.getY();
-  modified_msg.twist.twist.angular.z = rotated_angular.getZ();
+//   modified_msg.twist.twist.angular.x = rotated_angular.getX();
+//   modified_msg.twist.twist.angular.y = rotated_angular.getY();
+//   modified_msg.twist.twist.angular.z = rotated_angular.getZ();
 
   
-  //20201022录得地下车库包， 协方差有问题
-  for(int i = 0; i < 6; i++)
-    for(int j = 0; j <6; j++){
-      modified_msg.pose.covariance[i*6+j]=0.0;
-      modified_msg.twist.covariance[i*6+j]=0.0;
-  }
-  modified_msg.pose.covariance[0*6 + 0] = 0.1;
-  modified_msg.pose.covariance[1*6 + 1] = 0.1;
-  modified_msg.pose.covariance[2*6 + 2] = 1e-4;
-  modified_msg.pose.covariance[3*6 + 3] = 1e-4;
-  modified_msg.pose.covariance[4*6 + 4] = 1e-4;
-  modified_msg.pose.covariance[5*6 + 5] = 0.1;
+//   //20201022录得地下车库包， 协方差有问题
+//   for(int i = 0; i < 6; i++)
+//     for(int j = 0; j <6; j++){
+//       modified_msg.pose.covariance[i*6+j]=0.0;
+//       modified_msg.twist.covariance[i*6+j]=0.0;
+//   }
+//   modified_msg.pose.covariance[0*6 + 0] = 0.1;
+//   modified_msg.pose.covariance[1*6 + 1] = 0.1;
+//   modified_msg.pose.covariance[2*6 + 2] = 1e-4;
+//   modified_msg.pose.covariance[3*6 + 3] = 1e-4;
+//   modified_msg.pose.covariance[4*6 + 4] = 1e-4;
+//   modified_msg.pose.covariance[5*6 + 5] = 0.1;
 
-  modified_msg.twist.covariance[0*6 + 0] = 0.01;
-  modified_msg.twist.covariance[1*6 + 1] = 1e-4;
-  modified_msg.twist.covariance[2*6 + 2] = 1e-4;
-  modified_msg.twist.covariance[3*6 + 3] = 1e-4;
-  modified_msg.twist.covariance[4*6 + 4] = 1e-4;
-  modified_msg.twist.covariance[5*6 + 5] = 0.01;
+//   modified_msg.twist.covariance[0*6 + 0] = 0.01;
+//   modified_msg.twist.covariance[1*6 + 1] = 1e-4;
+//   modified_msg.twist.covariance[2*6 + 2] = 1e-4;
+//   modified_msg.twist.covariance[3*6 + 3] = 1e-4;
+//   modified_msg.twist.covariance[4*6 + 4] = 1e-4;
+//   modified_msg.twist.covariance[5*6 + 5] = 0.01;
 
-  // std::cout<<"\n\nhandle wheel_odom result\n";
-  // std::cout<<"result pose:\n";
-  // for(int i = 0; i < 6; i++){
-  //   for(int j = 0; j <6; j++){
-  //     std::cout<<modified_msg.pose.covariance[i*6+j]<<" ";
-  //   }
-  //   std::cout<<","<<std::endl;
-  // }
+//   // std::cout<<"\n\nhandle wheel_odom result\n";
+//   // std::cout<<"result pose:\n";
+//   // for(int i = 0; i < 6; i++){
+//   //   for(int j = 0; j <6; j++){
+//   //     std::cout<<modified_msg.pose.covariance[i*6+j]<<" ";
+//   //   }
+//   //   std::cout<<","<<std::endl;
+//   // }
 
-  // std::cout<<"\nresult velocity:\n";
-  // for(int i = 0; i < 6; i++){
-  //   for(int j = 0; j <6; j++){
-  //     std::cout<<modified_msg.twist.covariance[i*6+j]<<" ";
-  //   }
-  //   std::cout<<","<<std::endl;
-  // }
-
-}
+//   // std::cout<<"\nresult velocity:\n";
+//   // for(int i = 0; i < 6; i++){
+//   //   for(int j = 0; j <6; j++){
+//   //     std::cout<<modified_msg.twist.covariance[i*6+j]<<" ";
+//   //   }
+//   //   std::cout<<","<<std::endl;
+//   // }
+// }
 
 //TODO: jxl: 
 template<typename T>
 void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg){
-   //对lego_loam的topic中的旋转分量(位置分量不用变)，反解析得到t时刻虚拟laser在camera_init(0时刻的虚拟laser)位姿。
-   //根据lego_loam::mapOptimization::laserOdometryHandler()
+
+  // modified_msg.header.stamp = msg->header.stamp;
+  // modified_msg.header.frame_id = msg->header.frame_id;
+  // modified_msg.child_frame_id = msg->child_frame_id;
+  // modified_msg.pose.pose.position.x = msg->pose.pose.position.x; 
+  // modified_msg.pose.pose.position.y = msg->pose.pose.position.y; 
+  // modified_msg.pose.pose.position.z = msg->pose.pose.position.z;
+  // modified_msg.pose.pose.orientation.x = msg->pose.pose.orientation.x; 
+  // modified_msg.pose.pose.orientation.y = msg->pose.pose.orientation.y; 
+  // modified_msg.pose.pose.orientation.z = msg->pose.pose.orientation.z; 
+  // modified_msg.pose.pose.orientation.w = msg->pose.pose.orientation.w; 
+
+  //对lego_loam的topic中的旋转分量(位置分量不用变)，反解析得到t时刻虚拟laser在camera_init(0时刻的虚拟laser)位姿。
+  //根据lego_loam::mapOptimization::laserOdometryHandler()
+  // double roll, pitch, yaw;
+  // geometry_msgs::Quaternion geoQuat = msg->pose.pose.orientation;
+  // tf2::Matrix3x3(tf2::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
+  // double raw_pitch = -pitch; //虽然中间经过别扭转换，transformSum[0]仍然是在featureAssociation中计算的transformSum[0]，x_pitch
+  // double raw_yaw  = -yaw;   //y_yaw
+  // double raw_roll = roll;   //z_roll 
+  // // rotation = Ry(raw_yaw) * Rx(raw_pitch) * Rz(raw_roll) //zhangji
+  // //          = Rz(raw_yaw) * Ry(raw_pitch) * Rx(raw_roll) //ros
+
+  // tf2::Matrix3x3 R;
+  // tf2::Quaternion q;
+  // R.setRPY(raw_pitch, raw_yaw, raw_roll);   //这的顺序设置对吗？
+  // // R.setRPY(raw_roll, raw_pitch, raw_yaw);
+
+  // R.getRotation(q);
   
-  std::cout<<"Enter laser odom\n\n";
-  modified_msg = *msg;
+  // //设置旋转
+  // modified_msg.pose.pose.orientation.x = q.getX();
+  // modified_msg.pose.pose.orientation.y = q.getY();
+  // modified_msg.pose.pose.orientation.z = q.getZ();
+  // modified_msg.pose.pose.orientation.w = q.getW();
+  // //modified_msg: virtual_velodyne0 ---> virtual_velodyne 
 
-  double roll, pitch, yaw;
-  geometry_msgs::Quaternion geoQuat = msg->pose.pose.orientation;
-  tf2::Matrix3x3(tf2::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
-  double raw_pitch = -pitch; //虽然中间经过别扭转换，transformSum[0]仍然是在featureAssociation中计算的transformSum[0]，x_pitch
-  double raw_yaw  = -yaw;   //y_yaw
-  double raw_roll = roll;   //z_roll 
-  // rotation = Ry(raw_yaw) * Rx(raw_pitch) * Rz(raw_roll) //zhangji
-  //          = Rz(raw_yaw) * Ry(raw_pitch) * Rx(raw_roll) //ros
-
-  tf2::Matrix3x3 R;
-  tf2::Quaternion q;
-  R.setRPY(raw_pitch, raw_yaw, raw_roll);   //TODO：这的顺序设置对吗？
-  // R.setRPY(raw_roll, raw_pitch, raw_yaw);
-
-  R.getRotation(q);
   
-  //设置旋转
-  modified_msg.pose.pose.orientation.x = q.getX();
-  modified_msg.pose.pose.orientation.y = q.getY();
-  modified_msg.pose.pose.orientation.z = q.getZ();
-  modified_msg.pose.pose.orientation.w = q.getW();
+  //date: 20201102
+  //fusion_lego_loam1分支：
+  //将lego_loam的laser odom(旋转和位置)转换为ros正常坐标系下(x-front, y-left, z-up): odom到velodyne
+  //wheel_odom不变，依然在ros正常坐标系下，topic回调函数不做任何改变。
+  //imu不变，依然在ros正常坐标系下，topic回调函数不做任何改变。
+  tf2::Transform tmp1;
+{
+  tf2::Transform tf_modified_msg = tf2::Transform(tf2::Quaternion(msg->pose.pose.orientation.x,
+                                                                  msg->pose.pose.orientation.y, 
+                                                                  msg->pose.pose.orientation.z, 
+                                                                  msg->pose.pose.orientation.w), 
+                                                  tf2::Vector3(msg->pose.pose.position.x, 
+                                                               msg->pose.pose.position.y, 
+                                                               msg->pose.pose.position.z));                
+  tf_modified_msg *= virtual_velodye_to_velodyne_; //vir_velodyne0--->velodyne = vir_velodyne0--->vir_velodyne  *  vir_velodyne--->velodyne
+  tf2::Transform tmp = velodyne_to_virtual_velodyne_;
+  tmp *= tf_modified_msg; //velodyne0--->velodyne = velodyne0--->vir_velodyne0  *  vir_velodyne0--->velodyne
+
+  tmp1 = base_footprint_to_velodyne_;
+  tmp1 *= tmp; //odom--->velodyne = odom--->velodyne0 * velodyne0--->velodyne
+}
+
+  modified_msg.pose.pose.orientation.x = tmp1.getRotation().x();
+  modified_msg.pose.pose.orientation.y = tmp1.getRotation().y();
+  modified_msg.pose.pose.orientation.z = tmp1.getRotation().z();
+  modified_msg.pose.pose.orientation.w = tmp1.getRotation().w();
+  modified_msg.pose.pose.position.x =  tmp1.getOrigin().x();
+  modified_msg.pose.pose.position.y =  tmp1.getOrigin().y();
+  modified_msg.pose.pose.position.z =  tmp1.getOrigin().z();
+
 
   //设置位姿的covariance, 因为该topic的pose covariance全为0
-  for(int i = 0; i < 6; i++)
-    for(int j = 0; j <6; j++){
-      modified_msg.pose.covariance[i*6+j]=0.0;
-  }
+  // for(int i = 0; i < 6; i++)
+  //   for(int j = 0; j <6; j++){
+  //     modified_msg.pose.covariance[i*6+j]=0.0;
+  // }
   modified_msg.pose.covariance[0*6+0] = 0.01; //x, y, z
   modified_msg.pose.covariance[1*6+1] = 0.01;
   modified_msg.pose.covariance[2*6+2] = 0.01;
@@ -1906,8 +1981,9 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
   modified_msg.pose.covariance[4*6+4] = 0.01;
   modified_msg.pose.covariance[5*6+5] = 0.01;
 
-  modified_msg.header.frame_id = odomFrameId_; //"camera_init";
-  modified_msg.child_frame_id = baseLinkFrameId_; //"virtual_velodyne";
+  modified_msg.header.stamp = msg->header.stamp;
+  modified_msg.header.frame_id = "odom";      
+  modified_msg.child_frame_id = "velodyne_link";
 
 }
 
@@ -1918,29 +1994,70 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
   {
    nav_msgs::Odometry modified_msg; //jxl: 把下面涉及到msg的地方做修改
 
-   if(topicName.compare(wheel_odom_topic_) == 0){
-     handle_wheel_odom(msg, modified_msg);
-   }else if(topicName.compare(laser_odom_topic_) == 0){
+   if (topicName.compare(wheel_odom_topic_) == 0) {
+  
+     // handle_wheel_odom(msg, modified_msg);
+
+     modified_msg.header.stamp = msg->header.stamp;
+     modified_msg.header.frame_id = msg->header.frame_id;
+     modified_msg.child_frame_id = msg->child_frame_id;
+     modified_msg.pose.pose.position.x = msg->pose.pose.position.x;
+     modified_msg.pose.pose.position.y = msg->pose.pose.position.y;
+     modified_msg.pose.pose.position.z = msg->pose.pose.position.z;
+
+     modified_msg.pose.pose.orientation.x = msg->pose.pose.orientation.x;
+     modified_msg.pose.pose.orientation.y = msg->pose.pose.orientation.y;
+     modified_msg.pose.pose.orientation.z = msg->pose.pose.orientation.z;
+     modified_msg.pose.pose.orientation.w = msg->pose.pose.orientation.w;
+    
+
+     //the raw wheel_odom's covariance is too small, then the filtered result is not converge.
+     //when this param is false, we overwrite in the code.
+     if (!wheel_odom_covariance_valid_) {
+      //  for (int i = 0; i < 6; i++) {
+      //    for (int j = 0; j < 6; j++) {
+      //      modified_msg.pose.covariance[i * 6 + j] = 0.0;
+      //      modified_msg.twist.covariance[i * 6 + j] = 0.0;
+      //    }
+      //  }
+       modified_msg.pose.covariance[0 * 6 + 0] = 0.5;
+       modified_msg.pose.covariance[1 * 6 + 1] = 0.5;
+       modified_msg.pose.covariance[2 * 6 + 2] = 1e-4;
+       modified_msg.pose.covariance[3 * 6 + 3] = 1e-4;
+       modified_msg.pose.covariance[4 * 6 + 4] = 1e-4;
+       modified_msg.pose.covariance[5 * 6 + 5] = 0.5;
+
+       modified_msg.twist.covariance[0 * 6 + 0] = 0.1;
+       modified_msg.twist.covariance[1 * 6 + 1] = 1e-4;
+       modified_msg.twist.covariance[2 * 6 + 2] = 1e-4;
+       modified_msg.twist.covariance[3 * 6 + 3] = 1e-4;
+       modified_msg.twist.covariance[4 * 6 + 4] = 1e-4;
+       modified_msg.twist.covariance[5 * 6 + 5] = 0.1;
+     }
+    //  std::cout << "wheel odom done \n\n";
+
+   } else if (topicName.compare(laser_odom_topic_) == 0) {
      handle_laser_odom(msg, modified_msg);
-   }else{
-      ROS_ERROR("Please check the odom topic");
+    //  std::cout << "laser odom done \n\n";
+   } else {
+     ROS_ERROR("Please check the odom topic");
    }
 
-    // If we've just reset the filter, then we want to ignore any messages
-    // that arrive with an older timestamp
-    if (msg->header.stamp <= lastSetPoseTime_)
-    {
-      std::stringstream stream;
-      stream << "The " << topicName << " message has a timestamp equal to or before the last filter reset, " <<
-                "this message will be ignored. This may indicate an empty or bad timestamp. (message time: " <<
-                msg->header.stamp.toSec() << ")";
-      addDiagnostic(diagnostic_msgs::DiagnosticStatus::WARN,
-                    topicName + "_timestamp",
-                    stream.str(),
-                    false);
-      RF_DEBUG("Received message that preceded the most recent pose reset. Ignoring...");
+   // If we've just reset the filter, then we want to ignore any messages
+   // that arrive with an older timestamp
+   if (msg->header.stamp <= lastSetPoseTime_) {
+     std::stringstream stream;
+     stream << "The " << topicName << " message has a timestamp equal to or "
+                                      "before the last filter reset, "
+            << "this message will be ignored. This may indicate an empty or "
+               "bad timestamp. (message time: "
+            << msg->header.stamp.toSec() << ")";
+     addDiagnostic(diagnostic_msgs::DiagnosticStatus::WARN,
+                   topicName + "_timestamp", stream.str(), false);
+     RF_DEBUG("Received message that preceded the most recent pose reset. "
+              "Ignoring...");
 
-      return;
+     return;
     }
 
     RF_DEBUG("------ RosFilter::odometryCallback (" << topicName << ") ------\n" << "Odometry message:\n" << *msg);
@@ -1953,9 +2070,32 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
       // default:
       // posPtr->header = msg->header;
       // posPtr->pose = msg->pose;  // Entire pose object, also copies covariance
-
-      posPtr->header = modified_msg.header; //jxl
+      
+      //jxl
+      posPtr->header = modified_msg.header; 
       posPtr->pose = modified_msg.pose;
+
+      // std::cout<<"odom result\n";
+      // std::cout<<"frame_id is "<<modified_msg.header.frame_id<<",  child_frame_id is "<<modified_msg.child_frame_id<<std::endl;
+
+      // std::cout<<"position: ";
+      // std::cout<<modified_msg.pose.pose.position.x <<", "
+      //          <<modified_msg.pose.pose.position.y <<", "
+      //          <<modified_msg.pose.pose.position.z <<"\n";
+
+      // std::cout<<"orientation: ";
+      // std::cout<<modified_msg.pose.pose.orientation.x <<", "
+      //          <<modified_msg.pose.pose.orientation.y <<", "
+      //          <<modified_msg.pose.pose.orientation.z <<","
+      //          <<modified_msg.pose.pose.orientation.w <<"\n";
+
+      // std::cout<<"pose covariance:\n";
+      // for(int i = 0; i < 6; i++){
+      //   for(int j = 0; j <6; j++){
+      //     std::cout<<modified_msg.pose.covariance[i*6+j]<<" ";
+      //   }
+      //   std::cout<<std::endl;
+      // }
 
       geometry_msgs::PoseWithCovarianceStampedConstPtr pptr(posPtr);
       poseCallback(pptr, poseCallbackData, worldFrameId_, false);  //odom pose callback
@@ -2029,6 +2169,14 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
       // Make sure we're actually updating at least one of these variables
       std::vector<int> updateVectorCorrected = callbackData.updateVector_;
 
+      if (imuData) {
+        RF_DEBUG("<<=====imu pose=====>>"<<"\n");
+        RF_DEBUG("target frame is " << targetFrame<< "\n");
+        RF_DEBUG("measurement is \n" << measurement<< "\n");
+        RF_DEBUG("measurementCovariance is \n"<< measurementCovariance<< "\n" );
+        RF_DEBUG("updateVectorCorrected is \n"<< updateVectorCorrected<< "\n");
+      }
+
       // Prepare the pose data for inclusion in the filter
       if (preparePose(msg,
                       topicName,
@@ -2050,6 +2198,13 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
                            msg->header.stamp);
 
         RF_DEBUG("Enqueued new measurement for " << topicName << "\n");
+        if (imuData) {
+          RF_DEBUG("<<=====imu pose=====>>"<<"\n");
+          RF_DEBUG("target frame is \n" << targetFrame<<"\n");
+          RF_DEBUG("measurement is \n" << measurement<<"\n");
+          RF_DEBUG("measurementCovariance is \n"<< measurementCovariance<<"\n");
+          RF_DEBUG("updateVectorCorrected is \n"<< updateVectorCorrected<<"\n");
+        }
       }
       else
       {
@@ -2127,6 +2282,61 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
 
     if (getFilteredOdometryMessage(filteredPosition)) //滤波器估计的是“world_frame”--->"base_link"的TF
     {
+
+      //TODO jxl: 
+      //ekf得到的是：odom--->velodyne
+      //转换为virtual_velodyne0--->virtual_velodyne
+      //然后按照lego_loam中featureAssociation.cpp对transform_sum也做同样的修改
+      tf2::Transform tmp1;
+    {
+      tf2::Transform tf_result = tf2::Transform(tf2::Quaternion(filteredPosition.pose.pose.orientation.x,
+                                                                filteredPosition.pose.pose.orientation.y, 
+                                                                filteredPosition.pose.pose.orientation.z, 
+                                                                filteredPosition.pose.pose.orientation.w), 
+                                                 tf2::Vector3(filteredPosition.pose.pose.position.x, 
+                                                              filteredPosition.pose.pose.position.y, 
+                                                              filteredPosition.pose.pose.position.z));  
+      //tf_result: odom--->velodyne
+     
+      tf2::Transform tmp = velodyne_to_base_footprint_;
+      tmp *= tf_result; //tmp: velodyne0--->velodyne
+      tmp *= velodyne_to_virtual_velodyne_; //tmp: velodyne0--->virtual_velodyne
+      tmp1 = virtual_velodye_to_velodyne_;
+      tmp1 *= tmp; //virtual_velodyne0---> virtual_velodyne
+    }  
+      filteredPosition.pose.pose.orientation.x = tmp1.getRotation().x();
+      filteredPosition.pose.pose.orientation.y = tmp1.getRotation().y();
+      filteredPosition.pose.pose.orientation.z = tmp1.getRotation().z();
+      filteredPosition.pose.pose.orientation.w = tmp1.getRotation().w();
+      filteredPosition.pose.pose.position.x = tmp1.getOrigin().x();
+      filteredPosition.pose.pose.position.y = tmp1.getOrigin().y();
+      filteredPosition.pose.pose.position.z = tmp1.getOrigin().z();
+
+
+      // //对融合后的位姿按照lego_loam中featureAssociation.cpp对transform_sum也做同样的修改
+      // //给lego_loam的后端使用
+      // tf2::Quaternion q(tmp1.getRotation().x(), 
+      //                   tmp1.getRotation().y(),
+      //                   tmp1.getRotation().z(),
+      //                   tmp1.getRotation().w());
+      // double roll, pitch, yaw;
+      // tf2::Matrix3x3 R(q);
+      // R.getRPY(roll, pitch, yaw);
+      // geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(yaw, -roll, -pitch); 
+      // filteredPosition.pose.pose.orientation.x = -geoQuat.y;
+      // filteredPosition.pose.pose.orientation.y = -geoQuat.z;
+      // filteredPosition.pose.pose.orientation.z = geoQuat.x;
+      // filteredPosition.pose.pose.orientation.w = geoQuat.w;
+      // filteredPosition.pose.pose.position.x = tmp1.getOrigin().x();
+      // filteredPosition.pose.pose.position.y = tmp1.getOrigin().y();
+      // filteredPosition.pose.pose.position.z = tmp1.getOrigin().z();
+
+      filteredPosition.header.frame_id ="camera_init";  
+      filteredPosition.child_frame_id = "laser_odom";
+      //=======================修改结束======================//
+
+
+     
       worldBaseLinkTransMsg_.transform = tf2::toMsg(tf2::Transform::getIdentity());
       worldBaseLinkTransMsg_.header.stamp = filteredPosition.header.stamp + tfTimeOffset_;
       worldBaseLinkTransMsg_.header.frame_id = filteredPosition.header.frame_id;
@@ -2149,7 +2359,8 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
       // worldFrameId_ is the mapFrameId_ frame, we'll have some work to do.
       if (publishTransform_)
       {
-        if (filteredPosition.header.frame_id == odomFrameId_)//滤波器的“world_frame” = "odom"
+        // if (filteredPosition.header.frame_id == odomFrameId_)//滤波器的“world_frame” = "odom" //default
+        if (filteredPosition.header.frame_id == std::string("camera_init")) //jxl: provided to lego_loam use
         {
           worldTransformBroadcaster_.sendTransform(worldBaseLinkTransMsg_);
         }
@@ -2207,23 +2418,7 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
                            ", expected " << mapFrameId_ << " or " << odomFrameId_);
         }
       }
-      
-      //TODO jxl: 
-      //对融合后的位姿按照lego_loam中featureAssociation.cpp对transform_sum也做同样的修改
-      //给lego_loam的后端使用
-      tf2::Quaternion q(filteredPosition.pose.pose.orientation.x, 
-                        filteredPosition.pose.pose.orientation.y,
-                        filteredPosition.pose.pose.orientation.z,
-                        filteredPosition.pose.pose.orientation.w);
-      double roll, pitch, yaw;
-      tf2::Matrix3x3 R(q);
-      R.getRPY(roll, pitch, yaw);
-      geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(yaw, -roll, -pitch); 
-      filteredPosition.pose.pose.orientation.x = -geoQuat.y;
-      filteredPosition.pose.pose.orientation.y = -geoQuat.z;
-      filteredPosition.pose.pose.orientation.z = geoQuat.x;
-      filteredPosition.pose.pose.orientation.w = geoQuat.w;
-
+       
       // Fire off the position and the transform
       positionPub_.publish(filteredPosition);
 

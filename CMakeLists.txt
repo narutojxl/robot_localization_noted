@@ -3,8 +3,14 @@ project(robot_localization)
 
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   message("${PROJECT_NAME}: You did not request a specific build type: selecting 'RelWithDebInfo'.")
-  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+  # set(CMAKE_BUILD_TYPE RelWithDebInfo)
+  set(CMAKE_BUILD_TYPE Release) #jxl
 endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O3")
+set(CMAKE_CXX_STANDARD 14)
+
+
 
 find_package(catkin REQUIRED COMPONENTS
   diagnostic_msgs

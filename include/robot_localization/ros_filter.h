@@ -725,6 +725,12 @@ template<class T> class RosFilter
     void handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, nav_msgs::Odometry& modified_msg);
     std::string wheel_odom_topic_, laser_odom_topic_;
 
+    tf2::Transform virtual_velodye_to_velodyne_;
+    tf2::Transform velodyne_to_virtual_velodyne_;
+    tf2::Transform base_footprint_to_velodyne_;
+    tf2::Transform velodyne_to_base_footprint_;
+    bool wheel_odom_covariance_valid_;
+
 };
 
 }  // namespace RobotLocalization
