@@ -167,7 +167,7 @@ namespace RobotLocalization
     
     std::string error_msg("static tf not available, wait for available");
     while(true){
-      auto available = tfBuffer_.canTransform(vir_velodyne, velodyne,  ros::Time(0),  ros::Duration(5), &error_msg);
+      auto available = tfBuffer_.canTransform(vir_velodyne, velodyne,  ros::Time(0),  ros::Duration(0.2), &error_msg);
       if(available){
         tf2::fromMsg(tfBuffer_.lookupTransform(vir_velodyne, velodyne, ros::Time(0)).transform, //"virtual_velodyne" to  "velodyne"
                      virtual_velodye_to_velodyne_);
@@ -177,7 +177,7 @@ namespace RobotLocalization
     }
 
     while(true){
-      auto available = tfBuffer_.canTransform(base_footprint, velodyne,  ros::Time(0),  ros::Duration(5), &error_msg);
+      auto available = tfBuffer_.canTransform(base_footprint, velodyne,  ros::Time(0),  ros::Duration(0.2), &error_msg);
       if(available){
         tf2::fromMsg(tfBuffer_.lookupTransform(base_footprint, velodyne, ros::Time(0)).transform, //"virtual_velodyne" to  "velodyne"
                      base_footprint_to_velodyne_);
@@ -2020,19 +2020,19 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
       //      modified_msg.twist.covariance[i * 6 + j] = 0.0;
       //    }
       //  }
-       modified_msg.pose.covariance[0 * 6 + 0] = 0.5;
-       modified_msg.pose.covariance[1 * 6 + 1] = 0.5;
+       modified_msg.pose.covariance[0 * 6 + 0] = 0.02;
+       modified_msg.pose.covariance[1 * 6 + 1] = 0.02;
        modified_msg.pose.covariance[2 * 6 + 2] = 1e-4;
        modified_msg.pose.covariance[3 * 6 + 3] = 1e-4;
        modified_msg.pose.covariance[4 * 6 + 4] = 1e-4;
-       modified_msg.pose.covariance[5 * 6 + 5] = 0.5;
+       modified_msg.pose.covariance[5 * 6 + 5] = 0.02;
 
-       modified_msg.twist.covariance[0 * 6 + 0] = 0.1;
+       modified_msg.twist.covariance[0 * 6 + 0] = 0.05;
        modified_msg.twist.covariance[1 * 6 + 1] = 1e-4;
        modified_msg.twist.covariance[2 * 6 + 2] = 1e-4;
        modified_msg.twist.covariance[3 * 6 + 3] = 1e-4;
        modified_msg.twist.covariance[4 * 6 + 4] = 1e-4;
-       modified_msg.twist.covariance[5 * 6 + 5] = 0.1;
+       modified_msg.twist.covariance[5 * 6 + 5] = 0.05;
      }
     //  std::cout << "wheel odom done \n\n";
 
@@ -2286,7 +2286,6 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
       //TODO jxl: 
       //ekf得到的是：odom--->velodyne
       //转换为virtual_velodyne0--->virtual_velodyne
-      //然后按照lego_loam中featureAssociation.cpp对transform_sum也做同样的修改
       tf2::Transform tmp1;
     {
       tf2::Transform tf_result = tf2::Transform(tf2::Quaternion(filteredPosition.pose.pose.orientation.x,

@@ -1,11 +1,12 @@
 <launch>
 
-
+<param name="/use_sim_time" value="true" />  
 
 <!--static_transform_publisher x y z yaw pitch roll  frame_id   child_frame_id   period_in_ms-->
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_vir_velodyne"  args="0 0 0  1.570795   0   1.570795   /velodyne_link  /virtual_velodyne 10" />
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_base_footprint" args="-0.2385 0 -0.609   0 0 0  /velodyne_link  /base_footprint   10" />
-<node pkg="tf" type="static_transform_publisher" name="velodyne_to_imu_link" args="0.14 0 0.05  0 0 0  /velodyne_link  /imu_link   10" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_vir_velodyne"  args="0 0 0  1.570795   0   1.570795   /velodyne_link  /virtual_velodyne 20" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_base_footprint" args="-0.2385 0 -0.609   0 0 0  /velodyne_link  /base_footprint   20" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_imu_link" args="0.14 0 0.05  0 0 0  /velodyne_link  /imu_link   20" />
+<node pkg="tf" type="static_transform_publisher" name="velodyne_to_velodyne" args="0 0 0  0 0 0  /base_link  /velodyne_link   20" />
 
 <!--set frame consistent with topic msg-->
 <!--"/velodyne_points": velodyne-->
@@ -19,4 +20,5 @@
 
     <remap from="/odometry/filtered" to="/ekf_laser_odom_to_init"/>
 </node>
+
 </launch>

@@ -17,6 +17,8 @@ base_link_frame: velodyne_link
 world_frame: odom
 
 
+wheel_odom_topic: /odom
+laser_odom_topic: /laser_odom_to_init
 wheel_odom_covariance_valid: false 
 #the raw wheel_odom's covariance is too small, then the filtered result is not converge.
 #when this param is false, we overwrite in the code.
@@ -24,19 +26,20 @@ wheel_odom_covariance_valid: false
 
 
 #wheel_odom
-odom0: /odom1
+odom0: /odom
 odom0_config: [true,  true,  false,
                false, false, false,
-               false, false, false,
-               false, false, false, # when use vx and wz, result is worse
+               true,  false, false,
+               false, false, true, # when use vx and wz, result is worse
                false, false, false]  #x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
 
+
 odom0_nodelay: false
-odom0_differential: false 
+odom0_differential: true  #when use wheel odom's position and laser odom's position meanwhile, use with false, the filtered result is somewhat osciallated
 odom0_relative: false 
-odom0_queue_size: 5 #5
-odom0_pose_rejection_threshold: 5
-odom0_twist_rejection_threshold: 3
+odom0_queue_size: 20 #5
+# odom0_pose_rejection_threshold: 5
+# odom0_twist_rejection_threshold: 3
 
 
 #laser_odom
@@ -50,22 +53,22 @@ odom1_config: [true,  true,  true,
 odom1_nodelay: false
 odom1_differential: false 
 odom1_relative: false 
-odom1_queue_size: 5  #5
-odom1_pose_rejection_threshold: 5
-odom1_twist_rejection_threshold: 3
+odom1_queue_size: 20  #5
+# odom1_pose_rejection_threshold: 5
+# odom1_twist_rejection_threshold: 3
 
 
 
-imu0: /imu/data1
+imu0: /imu/data
 imu0_config: [false, false, false,
               true,  true,  true,  
               false, false, false,
-              false, false, false,
+              false, false, true,
               false, false, false]
 imu0_nodelay: false
 imu0_differential: false
 imu0_relative: true   # must be relative when use imu yaw, because we power-on imu time not consistent with the velodyne0 frame.  
-imu0_queue_size: 5  #5
+imu0_queue_size: 50  #5
 # imu0_pose_rejection_threshold: 0.8                 
 # imu0_twist_rejection_threshold: 0.8               
 # imu0_linear_acceleration_rejection_threshold: 0.8  
