@@ -1939,7 +1939,7 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
 
   
   //date: 20201102
-  //fusion_lego_loam1分支：
+  //fusion_lego_loam分支：
   //将lego_loam的laser odom(旋转和位置)转换为ros正常坐标系下(x-front, y-left, z-up): odom到velodyne
   //wheel_odom不变，依然在ros正常坐标系下，topic回调函数不做任何改变。
   //imu不变，依然在ros正常坐标系下，topic回调函数不做任何改变。
@@ -1956,7 +1956,7 @@ void RosFilter<T>::handle_laser_odom(const nav_msgs::Odometry::ConstPtr& msg, na
   tf2::Transform tmp = velodyne_to_virtual_velodyne_;
   tmp *= tf_modified_msg; //velodyne0--->velodyne = velodyne0--->vir_velodyne0  *  vir_velodyne0--->velodyne
 
-  tmp1 = base_footprint_to_velodyne_;
+  tmp1 = base_footprint_to_velodyne_;  //这的odom指的是base_link0
   tmp1 *= tmp; //odom--->velodyne = odom--->velodyne0 * velodyne0--->velodyne
 }
 

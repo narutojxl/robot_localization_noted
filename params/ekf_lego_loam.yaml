@@ -42,7 +42,6 @@ odom0_queue_size: 20 #5
 # odom0_twist_rejection_threshold: 3
 
 
-#laser_odom
 #a. when only use wheel odom + imu, not use laser odom:
 #   the filtered result is better than laser odom(the orientation basically conincide with backend's orientation, owing to imu's orientation. 
 #   the x,y basically conincide with backend's position, owing to wheel odom encoder. In z direction, there is a delta transform)
@@ -56,6 +55,8 @@ odom0_queue_size: 20 #5
 #   fortunately, lego loam's frontend use nolinear optimization(gaussian-newton) to calculate, we can calculate the covriance according to this paper
 #   "A closed-form estimate of 3D ICP covariance_2015" 
 
+
+#laser_odom
 odom1: /laser_odom_to_init1
 odom1_config: [true,  true,  true,
                true,  true,  true,
